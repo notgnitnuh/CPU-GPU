@@ -13,12 +13,13 @@
 
 using namespace std;
 
-int shell_parse(string command);
-pid_t spawn_child(const char* program, char** arg_list);
-string adjust_whitespace(string command, int spacing);
-void parse_commands(string args[], string command, char* arg_list[]);
-void run_parallel(string args[], string command, char* arg_list[]);
-void setoutput(string command);
+void BuiltInCommand(string command);
+int ShellParse(string command);
+pid_t SpawnChild(char* program, char** arg_list);
+string AdjustWhitespace(string command, int spacing);
+void ParseCommands(string args[], string command, char* arg_list[]);
+void RunParallel(string args[], string command, char* arg_list[]);
+void SetOutput(string command);
 char *path;
 
 // &| just runs &, |& throws error
@@ -31,7 +32,6 @@ int main(int argc, char *argv[])
     string command;
     ifstream f_in;
     path = getenv("PATH");
-    int i=0;
     string::iterator it;
 
     // Run interactive mode
@@ -42,34 +42,9 @@ int main(int argc, char *argv[])
             // Prompt for input, read it in, and format spacing 
             cout << ">";
             getline(cin, command, '\n');
-            command = adjust_whitespace(command, 1);
-
-            // Check for built in commands and run accordingly 
-            if(command == "exit")
-                exit(0);
-            else if ((command.find("|&") < command.size()-1) || (command.find("| &") < command.size()-1) || (command[command.size()-1] == '|'))
-               cout << "Syntax Error" << endl;
-            else if (command.find("cd") == 0)
-            {
-                i=0;
-                string temp = "chdir";
-                temp.append(command.substr(2,command.size()));
-                for(it=command.begin(); it != command.end(); it++)
-                {
-                    if(*it == ' ')
-                        i++;
-                }
-                if (i != 1)
-                    cout << "Invalid number of arguments, must be 1" << endl;
-                else
-                    setoutput(temp);
-            }
-            else if (command.find("PATH") == 0)
-                path = (char*)command.substr(command.find('=')+1, command.size()).c_str();
-            else
-                setoutput(command);
+            command = AdjustWhitespace(command, 1);
+            BuiltInCommand(command);
         }
-
     }
     else if (argc == 2)
     {
@@ -81,7 +56,7 @@ int main(int argc, char *argv[])
             while(f_in)
             {
                 getline(f_in, command, '\n');
-                setoutput(command);
+                BuiltInCommand(command);
             }
         }
         else
@@ -94,62 +69,82 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void setoutput(string command)
+void BuiltInCommand(string command)
+{
+    // Check for built in commands and run accordingly 
+    if(command == "exit")
+        exit(0);
+    // Check for syntax errors
+    else if ((command.find("|&") < command.size()-1) || (command.find("| &") < command.size()-1) || (command[command.size()-1] == '|'))
+        cout << "Syntax Error" << endl;
+    // Check for "cd" and handle accordingly
+    else if (command.find("cd") == 0)
+    {
+        command = AdjustWhitespace(command.substr(command.find("cd")+2, command.size()),1);
+        if(command.find(' ') < command.size())
+            cout << "Incorrect number of arguments." << endl;
+        else
+        {
+            if(chdir(command.c_str()) != 0)
+                cout << "Error in path" << endl;
+        }
+    }
+    // Check for "PATH" renaming
+    else if (command.find("PATH") == 0)
+        path = (char*)command.substr(command.find('=')+1, command.size()).c_str();
+    // Run normally
+    else
+        SetOutput(command);
+}
+
+void SetOutput(string command)
 {
     string filename;
 
-    // Run parallel
     if ( command.find('>') < command.size())
     {
         // get file and command names
         filename = command.substr(command.find('>')+1, command.size());
         filename = filename.substr(filename.find_first_not_of(' '), filename.size());
-        cout << filename << endl;
         command = command.erase(command.find('>'), command.size());
-        cout << command << endl;
 
         // Change output location
         auto actual_stdout = fdopen(dup(fileno(stdout)), "w");
-        shell_parse(command);
+        ShellParse(command);
         if(freopen((char*)filename.c_str(), "w", stdout))
         {
-            shell_parse(command.substr(0, command.find('>')));
+            ShellParse(command.substr(0, command.find('>')));
         }
         fclose(stdout);
         auto stdout = fdopen(dup(fileno(actual_stdout)), "w");
+        fclose(actual_stdout);
+        // cout.rdbuf(stdout);
     }
     else
-        shell_parse(command);
+        ShellParse(command);
 }
 
-int shell_parse(string command)
+int ShellParse(string command)
 {
-    //size_t pos=0;
     string args[20]; 
     char* arg_list[20];
     string::iterator it; 
     string sub_string;
 
-    // Run parallel
-    if(command.find('&') < command.size())
-    {
-        run_parallel(args, command, arg_list);
-    }
-    else if (command.find('|') < command.size())
+    // Parse by pipes
+    // Determine output location
+    // run
+    if (command.find('|') < command.size())
     {
         cout << "TODO: add '|' support" << endl;
     }
-    else // Run standard
-    {    
-        parse_commands(args, command, arg_list);
-        spawn_child(arg_list[0], arg_list);
-        wait(nullptr);
-    }
+    else
+        RunParallel(args, command, arg_list);
     
     return 0;
 }
 
-void run_parallel(string args[], string command, char* arg_list[])
+void RunParallel(string args[], string command, char* arg_list[])
 {
     size_t pos =0;
     // Run any commands before the '&'
@@ -157,21 +152,21 @@ void run_parallel(string args[], string command, char* arg_list[])
     {
         if (command[pos] == '&')
         {
-            parse_commands(args, adjust_whitespace(command.substr(0,pos),1), arg_list);
-            spawn_child(arg_list[0], arg_list);
+            ParseCommands(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
+            SpawnChild(arg_list[0], arg_list);
             command.erase(0,pos+1);
             pos = 0;
         }
     }
     // Run last command after '&', will do nothing if ends with '&'
-    parse_commands(args, adjust_whitespace(command,1), arg_list);
-    spawn_child(arg_list[0], arg_list);
+    ParseCommands(args, AdjustWhitespace(command,1), arg_list);
+    SpawnChild(arg_list[0], arg_list);
 
     // Wait for all children to die
     while(wait(NULL)>0);
 }
 
-void parse_commands(string args[], string command, char* arg_list[])
+void ParseCommands(string args[], string command, char* arg_list[])
 {
     size_t pos=0;
     int i=0;
@@ -195,9 +190,8 @@ void parse_commands(string args[], string command, char* arg_list[])
 
 
 // spawn a child and use it
-pid_t spawn_child(const char* program, char** arg_list) 
+pid_t SpawnChild(char* program, char** arg_list) 
 {
-    //cout << arg_list[0] << "_" << arg_list[1] << "_" << endl;
     //create child
     pid_t ch_pid = fork();
     if (ch_pid == -1)    // kill if error
@@ -205,11 +199,8 @@ pid_t spawn_child(const char* program, char** arg_list)
         perror("fork");
         exit(EXIT_FAILURE);
     } 
-    else if (ch_pid > 0) // wait if parent
-    {
-        //wait(nullptr);
+    else if (ch_pid > 0) // return if parent
         return ch_pid;
-    } 
     else                 // exec process if child
     {
         char *envp[] = {path, NULL};
@@ -220,22 +211,13 @@ pid_t spawn_child(const char* program, char** arg_list)
 }
 
 // remove excess whitespace
-string adjust_whitespace(string command, int spacing)
+string AdjustWhitespace(string command, int spacing)
 {
     int num_spaces = 0;
-    size_t i = 0, j = command.size();
+    size_t i = 0;
 
     //remove leading and trailing spaces
-    while(i != j)
-    {
-        if(command[i] == ' ')
-            i++;
-        else if(command[j-1] == ' ')
-            j--;
-        else
-            break;
-    }
-    command = command.substr(i,j);
+    command = command.substr(command.find_first_not_of(' '),command.find_last_not_of(' ')+1);
 
     // Check each index of string
     for(i = 0; i< command.size();)
