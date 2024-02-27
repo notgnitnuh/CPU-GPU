@@ -16,6 +16,7 @@ using namespace std;
 int shell_parse(string command);
 pid_t spawn_child(const char* program, char** arg_list);
 string adjust_whitespace(string command, int spacing);
+void parse_commands(string args[], string command, char* arg_list[]);
 char *path;
 
 // &| just runs &, |& throws error
@@ -93,16 +94,31 @@ int main(int argc, char *argv[])
 
 int shell_parse(string command)
 {
-    char delimiter = ' ';
-    int pos=0, i=0;
-    string token;
-    string args[50];
-    char* arg_list[] = {(char*)command.c_str(), NULL};
+    size_t pos=0;
+    string args[20]; 
+    char* arg_list[20];
+    string::iterator it; 
 
-
+    // Run parallel
     if(command.find('&') < command.size())
     {
-        cout << "TODO: add '&' support" << endl;
+        // Run any commands before the '&'
+        for(; pos < command.size(); pos++)
+        {
+            if (command[pos] == '&')
+            {
+                parse_commands(args, adjust_whitespace(command.substr(0,pos),1), arg_list);
+                spawn_child(arg_list[0], arg_list);
+                command.erase(0,pos+1);
+                pos = 0;
+            }
+        }
+        // Run last command after '&', will do nothing if ends with '&'
+        parse_commands(args, adjust_whitespace(command,1), arg_list);
+        spawn_child(arg_list[0], arg_list);
+
+        // Wait for all children to die
+        while(wait(NULL)>0);
     }
     else if (command.find('|') < command.size())
     {
@@ -110,35 +126,41 @@ int shell_parse(string command)
     }
     else // Run standard
     {    
-        while((pos = command.find(delimiter))!= int(string::npos))
-        {
-            args[i] = command.substr(0, pos).c_str();
-            //*arg_list[i] = ' ';
-            //strcpy(arg_list[i], token.c_str());
-            arg_list[i] = (char*)args[i].c_str();
-            command.erase(0, pos+1);
-            i++; 
-            //cout << "delim" << endl;
-        }
+        parse_commands(args, command, arg_list);
         spawn_child(arg_list[0], arg_list);
+        wait(nullptr);
     }
-
-    for (int j=0; j<=i; j++)
-    {
-        //arg_list[j] = (char*)args[j].c_str();
-        //arg_list[j+1] = NULL;
-        //cout << "args: " << args[j] << endl;
-        //cout << "list: " << arg_list[j] << endl;
-    }
-
     
     return 0;
+}
+
+void parse_commands(string args[], string command, char* arg_list[])
+{
+    size_t pos=0;
+    int i=0;
+
+    while(!command.empty())
+    {
+        // parse args by spaces
+        if((command[pos] == ' ') || (pos == command.size()))
+        {
+            args[i] = (command.substr(0,pos));
+            arg_list[i] = (char*)args[i].c_str();
+            command.erase(0,pos+1);
+            i++;
+            pos=0;
+        }
+        else
+            pos++;
+    }
+    arg_list[i] = NULL;
 }
 
 
 // spawn a child and use it
 pid_t spawn_child(const char* program, char** arg_list) 
 {
+    //cout << arg_list[0] << "_" << arg_list[1] << "_" << endl;
     //create child
     pid_t ch_pid = fork();
     if (ch_pid == -1)    // kill if error
@@ -148,7 +170,7 @@ pid_t spawn_child(const char* program, char** arg_list)
     } 
     else if (ch_pid > 0) // wait if parent
     {
-        wait(nullptr);
+        //wait(nullptr);
         return ch_pid;
     } 
     else                 // exec process if child
@@ -156,7 +178,6 @@ pid_t spawn_child(const char* program, char** arg_list)
         char *envp[] = {path, NULL};
         execvpe(program, arg_list, envp);
         perror("execve");
-        //cout << arg_list << endl;
         exit(EXIT_FAILURE);
     }
 }
