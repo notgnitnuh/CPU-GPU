@@ -17,6 +17,8 @@ int shell_parse(string command);
 pid_t spawn_child(const char* program, char** arg_list);
 string adjust_whitespace(string command, int spacing);
 void parse_commands(string args[], string command, char* arg_list[]);
+void run_parallel(string args[], string command, char* arg_list[]);
+void setoutput(string command);
 char *path;
 
 // &| just runs &, |& throws error
@@ -60,12 +62,12 @@ int main(int argc, char *argv[])
                 if (i != 1)
                     cout << "Invalid number of arguments, must be 1" << endl;
                 else
-                    shell_parse(temp);
+                    setoutput(temp);
             }
             else if (command.find("PATH") == 0)
                 path = (char*)command.substr(command.find('=')+1, command.size()).c_str();
             else
-                shell_parse(command);
+                setoutput(command);
         }
 
     }
@@ -79,7 +81,7 @@ int main(int argc, char *argv[])
             while(f_in)
             {
                 getline(f_in, command, '\n');
-                shell_parse(command);
+                setoutput(command);
             }
         }
         else
@@ -92,33 +94,46 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+void setoutput(string command)
+{
+    string filename;
+
+    // Run parallel
+    if ( command.find('>') < command.size())
+    {
+        // get file and command names
+        filename = command.substr(command.find('>')+1, command.size());
+        filename = filename.substr(filename.find_first_not_of(' '), filename.size());
+        cout << filename << endl;
+        command = command.erase(command.find('>'), command.size());
+        cout << command << endl;
+
+        // Change output location
+        auto actual_stdout = fdopen(dup(fileno(stdout)), "w");
+        shell_parse(command);
+        if(freopen((char*)filename.c_str(), "w", stdout))
+        {
+            shell_parse(command.substr(0, command.find('>')));
+        }
+        fclose(stdout);
+        auto stdout = fdopen(dup(fileno(actual_stdout)), "w");
+    }
+    else
+        shell_parse(command);
+}
+
 int shell_parse(string command)
 {
-    size_t pos=0;
+    //size_t pos=0;
     string args[20]; 
     char* arg_list[20];
     string::iterator it; 
+    string sub_string;
 
     // Run parallel
     if(command.find('&') < command.size())
     {
-        // Run any commands before the '&'
-        for(; pos < command.size(); pos++)
-        {
-            if (command[pos] == '&')
-            {
-                parse_commands(args, adjust_whitespace(command.substr(0,pos),1), arg_list);
-                spawn_child(arg_list[0], arg_list);
-                command.erase(0,pos+1);
-                pos = 0;
-            }
-        }
-        // Run last command after '&', will do nothing if ends with '&'
-        parse_commands(args, adjust_whitespace(command,1), arg_list);
-        spawn_child(arg_list[0], arg_list);
-
-        // Wait for all children to die
-        while(wait(NULL)>0);
+        run_parallel(args, command, arg_list);
     }
     else if (command.find('|') < command.size())
     {
@@ -132,6 +147,28 @@ int shell_parse(string command)
     }
     
     return 0;
+}
+
+void run_parallel(string args[], string command, char* arg_list[])
+{
+    size_t pos =0;
+    // Run any commands before the '&'
+    for(; pos < command.size(); pos++)
+    {
+        if (command[pos] == '&')
+        {
+            parse_commands(args, adjust_whitespace(command.substr(0,pos),1), arg_list);
+            spawn_child(arg_list[0], arg_list);
+            command.erase(0,pos+1);
+            pos = 0;
+        }
+    }
+    // Run last command after '&', will do nothing if ends with '&'
+    parse_commands(args, adjust_whitespace(command,1), arg_list);
+    spawn_child(arg_list[0], arg_list);
+
+    // Wait for all children to die
+    while(wait(NULL)>0);
 }
 
 void parse_commands(string args[], string command, char* arg_list[])
