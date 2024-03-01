@@ -14,12 +14,13 @@
 
 using namespace std;
 
-void BuiltInCommand(string command);
-int ShellParse(string command);
-pid_t SpawnChild(char* program, char** arg_list, string filename);
 string AdjustWhitespace(string command, int spacing);
+void BuiltInCommand(string command);
+void IORedirect(string &command, size_t pos, bool input);
 void ParseCommands(string args[], string command, char* arg_list[]);
 void RunParallel(string args[], string command, char* arg_list[]);
+int ShellParse(string command);
+pid_t SpawnChild(char* program, char** arg_list, string filename, bool input=false);
 char *path;
 
 // &| just runs &, |& throws error
@@ -124,7 +125,8 @@ int ShellParse(string command)
 void RunParallel(string args[], string command, char* arg_list[])
 {
     size_t pos =0;
-    string filename; 
+    string f_in, f_out;
+
     // Run any commands before the '&'
     for(; pos < command.size(); pos++)
     {
@@ -138,32 +140,17 @@ void RunParallel(string args[], string command, char* arg_list[])
         }
         else if (command[pos] == '>')
         {
-            // Parse command and remove from string
-            ParseCommands(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
-            command.erase(0,pos+1);
-
-            // Remove leading whitespace
-            if(command[0] == ' ')
-                command.erase(0,1);
-            
-            // Parse file name
+            IORedirect(command, pos, false);
             pos = 0;
-            while(command[pos] != '|' && command[pos] != '&' && pos < command.size())
-                pos++;
-            filename = command.substr(0,pos);
-
-            SpawnChild(arg_list[0], arg_list, filename);
-
-            // Cleanup
-            if(pos < command.size())
-                command.erase(0,pos+1);
-            else
-                command.clear();
-
+        }
+        else if (command[pos] == '<')
+        {
+            IORedirect(command, pos, true);
             pos = 0;
         }
     }
-    // Run if command after '&'
+
+    // Run if any command after '&'
     if(command.size() > 1)
     {
         ParseCommands(args, AdjustWhitespace(command,1), arg_list);
@@ -172,6 +159,32 @@ void RunParallel(string args[], string command, char* arg_list[])
 
     // Wait for all children to die
     while(wait(NULL)>0);
+}
+
+void IORedirect(string &command, size_t pos, bool input)
+{
+    string args[20]; 
+    string filename;
+    char* arg_list[20];
+
+    // Parse command and remove from string
+    ParseCommands(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
+    command.erase(0,pos+1);
+
+    // Remove leading whitespace
+    if(command[0] == ' ')
+        command.erase(0,1);
+    
+    // Parse and format file name
+    pos = 0;
+    while(command[pos] != '|' && command[pos] != '&' && pos < command.size())
+        pos++;
+    filename = AdjustWhitespace(command.substr(0,pos),0);
+
+    SpawnChild(arg_list[0], arg_list, filename, input);
+
+    // Cleanup
+    command.erase(0,pos+1);
 }
 
 // Parse command by spaces, put into args[] and point arg_list** toward it
@@ -200,7 +213,7 @@ void ParseCommands(string args[], string command, char* arg_list[])
 
 // spawn a child and use it
 // may need to add wait to parent process
-pid_t SpawnChild(char* program, char** arg_list, string filename) 
+pid_t SpawnChild(char* program, char** arg_list, string filename, bool input) 
 {
     //create child
     pid_t ch_pid = fork();
@@ -218,8 +231,12 @@ pid_t SpawnChild(char* program, char** arg_list, string filename)
         // If filename provided, open it and write to it
         if (filename != " ")
         {
-            int fd = open(filename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-            dup2(fd, 1);
+            int fd = open(filename.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR);
+
+            if(input)
+                dup2(fd, 0);
+            else
+                dup2(fd, 1);
         }
         execvpe(program, arg_list, envp);
         cout << program << endl;
