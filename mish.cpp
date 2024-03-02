@@ -16,11 +16,11 @@ using namespace std;
 
 string AdjustWhitespace(string command, int spacing);
 void BuiltInCommand(string command);
-void IORedirect(string &command, size_t pos, bool input);
+string IORedirect(string &command, size_t pos);
 void ParseCommands(string args[], string command, char* arg_list[]);
 void RunParallel(string args[], string command, char* arg_list[]);
 int ShellParse(string command);
-pid_t SpawnChild(char* program, char** arg_list, string filename, bool input=false);
+pid_t SpawnChild(char* program, char** arg_list, string f_in, string f_out);
 char *path;
 
 // &| just runs &, |& throws error
@@ -134,19 +134,23 @@ void RunParallel(string args[], string command, char* arg_list[])
         {
             // Parse command, spawn child, peform cleanup
             ParseCommands(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
-            SpawnChild(arg_list[0], arg_list, " ");
+            SpawnChild(arg_list[0], arg_list, f_in, f_out);
             command.erase(0,pos+1);
+            f_in.clear();
+            f_out.clear();
             pos = 0;
         }
         else if (command[pos] == '>')
         {
-            IORedirect(command, pos, false);
-            pos = 0;
+            // Add input file name
+            f_out = IORedirect(command, pos);
+            pos--;
         }
         else if (command[pos] == '<')
         {
-            IORedirect(command, pos, true);
-            pos = 0;
+            // Add output file name
+            f_in = IORedirect(command, pos);
+            pos--;
         }
     }
 
@@ -154,37 +158,33 @@ void RunParallel(string args[], string command, char* arg_list[])
     if(command.size() > 1)
     {
         ParseCommands(args, AdjustWhitespace(command,1), arg_list);
-        SpawnChild(arg_list[0], arg_list, " ");
+        SpawnChild(arg_list[0], arg_list, f_in, f_out);
     }
 
     // Wait for all children to die
     while(wait(NULL)>0);
 }
 
-void IORedirect(string &command, size_t pos, bool input)
+string IORedirect(string &command, size_t pos)
 {
-    string args[20]; 
-    string filename;
-    char* arg_list[20];
+    //TODO: throw errors for back to back '>' or '<'
+    string filename = AdjustWhitespace(command.substr(pos, command.size()),1);
+    filename = filename.substr(1, filename.find_first_of("&|><",pos)-1);
+    command.erase(pos,filename.size()+1);
 
-    // Parse command and remove from string
-    ParseCommands(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
-    command.erase(0,pos+1);
+    if(filename[filename.size()-1] == ' ')
+        filename.erase(filename.size()-1, 1);
+    if(filename[0] == ' ')
+        filename.erase(0,1);
 
-    // Remove leading whitespace
-    if(command[0] == ' ')
-        command.erase(0,1);
+    if(filename.find_first_of(' ') < filename.size())
+    {
+        cout << "Error in number of arguments" << endl;
+        filename.clear();
+    }
     
-    // Parse and format file name
-    pos = 0;
-    while(command[pos] != '|' && command[pos] != '&' && pos < command.size())
-        pos++;
-    filename = AdjustWhitespace(command.substr(0,pos),0);
-
-    SpawnChild(arg_list[0], arg_list, filename, input);
-
     // Cleanup
-    command.erase(0,pos+1);
+    return filename; 
 }
 
 // Parse command by spaces, put into args[] and point arg_list** toward it
@@ -213,7 +213,7 @@ void ParseCommands(string args[], string command, char* arg_list[])
 
 // spawn a child and use it
 // may need to add wait to parent process
-pid_t SpawnChild(char* program, char** arg_list, string filename, bool input) 
+pid_t SpawnChild(char* program, char** arg_list, string f_in, string f_out) 
 {
     //create child
     pid_t ch_pid = fork();
@@ -229,14 +229,25 @@ pid_t SpawnChild(char* program, char** arg_list, string filename, bool input)
         char *envp[] = {path, NULL};
 
         // If filename provided, open it and write to it
-        if (filename != " ")
+        if (!f_in.empty())
         {
-            int fd = open(filename.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR);
-
-            if(input)
-                dup2(fd, 0);
-            else
-                dup2(fd, 1);
+            int fi = open(f_in.c_str(), O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
+            if(fi == -1)
+            {
+                cout << "Error opening input file" << endl;
+                exit(EXIT_FAILURE);
+            }
+            dup2(fi, 0);
+        }
+        if(!f_out.empty())
+        {
+            int fd = open(f_out.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR);
+            if(fd == -1)
+            {
+                cout << "Error opening output file" << endl;
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd,1);
         }
         execvpe(program, arg_list, envp);
         cout << program << endl;
