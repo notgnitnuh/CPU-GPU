@@ -7,7 +7,6 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <vector>
-#include <atomic>
 #include <iterator>
 //#include <readline/readline.h>
 //#include <readline/history.h>
@@ -15,12 +14,13 @@
 using namespace std;
 
 string AdjustWhitespace(string command, int spacing);
+string GetFileName(string &command, size_t pos);
 void BuiltInCommand(string command);
-string IORedirect(string &command, size_t pos);
-void ParseCommands(string args[], string command, char* arg_list[]);
+void MakeArgList(string args[], string command, char* arg_list[]);
 void RunParallel(string args[], string command, char* arg_list[]);
+void pipeing(string command, int &fi, int &fd);
 int ShellParse(string command);
-pid_t SpawnChild(char* program, char** arg_list, string f_in, string f_out);
+pid_t SpawnChild(char* program, char** arg_list, int fi, int fd);
 char *path;
 
 // &| just runs &, |& throws error
@@ -106,26 +106,87 @@ int ShellParse(string command)
 {
     string args[20]; 
     char* arg_list[20];
-    string::iterator it; 
-    string sub_string;
+    int fi = -1, fd = -1;
 
-    // Parse by pipes
-    // Determine output location
-    // run
+    // find '|' or '><' the set fi/fd
+    // run commands between
     if (command.find('|') < command.size())
-    {
-        cout << "TODO: add '|' support" << endl;
-    }
+        pipeing(command, fi, fd);
     else
         RunParallel(args, command, arg_list);
     
     return 0;
 }
 
+// Parse a command at pipes
+// void ParsePipes(string command, char* parsed_pipes[])
+// {
+//     int i=0;
+//     parsed_pipes[i] = " ";
+//     while(parsed_pipes[i] != NULL)
+//     {
+//         parsed_pipes[i] = strsep(&command, "|")
+//     }
+// }
+
+void pipeing(string command, int &fi, int &fd)
+{
+    string args[20]; 
+    char* arg_list[20];
+    int pipefd[2];
+    pid_t cpid;
+    char *envp[] = {path, NULL};
+
+    // parse int left and right of '|'
+    string command1 = AdjustWhitespace(command.substr(0,command.find('|')),1);
+    string command2 = AdjustWhitespace(command.substr(command.find('|')+1, command.size()),1);
+    if(pipe(pipefd) == -1){
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    cpid = fork();
+    if(cpid == 0)
+    {
+        close(pipefd[0]);       // close read end
+        dup2(pipefd[1],1);      //send stdout to pipe
+        close(pipefd[1]);       // descriptor no longer needed
+
+        MakeArgList(args, command1, arg_list);
+        execvpe(arg_list[0], arg_list, envp);   //call exec
+        perror("execvpe");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        int cpid2 = fork();
+        if(cpid2 == 0)
+        {
+            close(pipefd[1]);   //close write
+            dup2(pipefd[0], 0);
+            close(pipefd[0]);
+            dup2(fd, 1);
+
+            MakeArgList(args, command2, arg_list);
+            execvpe(arg_list[0], arg_list, envp);
+            perror("execvpe");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            close(pipefd[1]); // close write end
+            close(pipefd[0]);
+            wait(NULL);
+            wait(NULL);
+        }
+    }   
+}
+
 void RunParallel(string args[], string command, char* arg_list[])
 {
     size_t pos =0;
     string f_in, f_out;
+    int fi = -1, fd = -1;
 
     // Run any commands before the '&'
     for(; pos < command.size(); pos++)
@@ -133,8 +194,8 @@ void RunParallel(string args[], string command, char* arg_list[])
         if (command[pos] == '&')
         {
             // Parse command, spawn child, peform cleanup
-            ParseCommands(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
-            SpawnChild(arg_list[0], arg_list, f_in, f_out);
+            MakeArgList(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
+            SpawnChild(arg_list[0], arg_list, fi, fd);
             command.erase(0,pos+1);
             f_in.clear();
             f_out.clear();
@@ -143,13 +204,25 @@ void RunParallel(string args[], string command, char* arg_list[])
         else if (command[pos] == '>')
         {
             // Add input file name
-            f_out = IORedirect(command, pos);
+            f_out = GetFileName(command, pos);
+            fd = open(f_out.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_TRUNC, S_IRUSR | S_IWUSR);
+            if(fd == -1)
+            {
+                perror("errno");
+                exit(EXIT_FAILURE);
+            }
             pos--;
         }
         else if (command[pos] == '<')
         {
             // Add output file name
-            f_in = IORedirect(command, pos);
+            f_in = GetFileName(command, pos);
+            fi = open(f_in.c_str(), O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
+            if(fi == -1)
+            {
+                perror("errno");
+                exit(EXIT_FAILURE);
+            }
             pos--;
         }
     }
@@ -157,15 +230,16 @@ void RunParallel(string args[], string command, char* arg_list[])
     // Run if any command after '&'
     if(command.size() > 1)
     {
-        ParseCommands(args, AdjustWhitespace(command,1), arg_list);
-        SpawnChild(arg_list[0], arg_list, f_in, f_out);
+        MakeArgList(args, AdjustWhitespace(command,1), arg_list);
+        SpawnChild(arg_list[0], arg_list, fi, fd);
     }
 
     // Wait for all children to die
     while(wait(NULL)>0);
 }
 
-string IORedirect(string &command, size_t pos)
+// Remove the file name from the string "command" and return the file name
+string GetFileName(string &command, size_t pos)
 {
     //TODO: throw errors for back to back '>' or '<'
     string filename = AdjustWhitespace(command.substr(pos, command.size()),1);
@@ -188,7 +262,7 @@ string IORedirect(string &command, size_t pos)
 }
 
 // Parse command by spaces, put into args[] and point arg_list** toward it
-void ParseCommands(string args[], string command, char* arg_list[])
+void MakeArgList(string args[], string command, char* arg_list[])
 {
     size_t pos=0;
     int i=0;
@@ -210,11 +284,11 @@ void ParseCommands(string args[], string command, char* arg_list[])
     arg_list[i] = NULL;
 }
 
-
 // spawn a child and use it
 // may need to add wait to parent process
-pid_t SpawnChild(char* program, char** arg_list, string f_in, string f_out) 
+pid_t SpawnChild(char* program, char** arg_list, int fi, int fd) 
 {
+    char *envp[] = {path, NULL};
     //create child
     pid_t ch_pid = fork();
     if (ch_pid == -1)    // kill if error
@@ -226,31 +300,18 @@ pid_t SpawnChild(char* program, char** arg_list, string f_in, string f_out)
         return ch_pid;
     else                 // exec process if child
     {
-        char *envp[] = {path, NULL};
-
-        // If filename provided, open it and write to it
-        if (!f_in.empty())
+        // If filenames provided open and use
+        if (fi != -1)
         {
-            int fi = open(f_in.c_str(), O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
-            if(fi == -1)
-            {
-                cout << "Error opening input file" << endl;
-                exit(EXIT_FAILURE);
-            }
             dup2(fi, 0);
         }
-        if(!f_out.empty())
+        if(fd != -1)
         {
-            int fd = open(f_out.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR);
-            if(fd == -1)
-            {
-                cout << "Error opening output file" << endl;
-                exit(EXIT_FAILURE);
-            }
             dup2(fd,1);
         }
+
+        // Call syscall and return
         execvpe(program, arg_list, envp);
-        cout << program << endl;
         perror("execvpe");
         exit(EXIT_FAILURE);
     }
