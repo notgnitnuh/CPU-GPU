@@ -14,11 +14,11 @@
 using namespace std;
 
 string AdjustWhitespace(string command, int spacing);
-string GetFileName(string &command, size_t pos);
+int OpenFile(string &command, size_t pos, bool input);
 void BuiltInCommand(string command);
 void MakeArgList(string args[], string command, char* arg_list[]);
-void RunParallel(string args[], string command, char* arg_list[]);
-void pipeing(string command, int &fi, int &fd);
+void RunSingle(string command, int fi, int fd);
+void Pipeing(string command, int &fi, int &fd);
 int ShellParse(string command);
 pid_t SpawnChild(char* program, char** arg_list, int fi, int fd);
 char *path;
@@ -66,10 +66,11 @@ int main(int argc, char *argv[])
     }
     else
 	    cout << "Too many arguments" << endl;
-    cout << "Shell exited" << endl;
+
     return 0;
 }
 
+// Check for built in commands
 void BuiltInCommand(string command)
 {
     // Check for built in commands and run accordingly 
@@ -102,34 +103,83 @@ void BuiltInCommand(string command)
         ShellParse(command);
 }
 
+// Parse shell inputs to determine input/output
 int ShellParse(string command)
 {
-    string args[20]; 
-    char* arg_list[20];
-    int fi = -1, fd = -1;
+    int fi = -1, fd = -1, pos;
 
-    // find '|' or '><' the set fi/fd
-    // run commands between
-    if (command.find('|') < command.size())
-        pipeing(command, fi, fd);
-    else
-        RunParallel(args, command, arg_list);
-    
+    // sets i/o
+    for(size_t i=0; i< command.size(); i++)
+    {
+        if(command[0] == '&')
+        {
+            command.erase(0,1);
+            i--;
+        }
+
+        if(command[i] == '|')
+        {
+            // Set and run pipe
+            // FIXME: only runs single pipe, doesn't send output anywhere else
+            pos = command.find_first_of("&|<>",i+1);
+            Pipeing(command.substr(0,pos), fi, fd);
+            command.erase(0,pos);
+            i=0;
+        }
+        else if (command[i] == '<')
+        {
+            // Open input file and run
+            fi = OpenFile(command, i, true);
+            pos=command.find_first_not_of(' ',i);
+
+            // Check and send results to different file if desired
+            if(command[pos] == '>')
+                fd = OpenFile(command, pos, false);
+            RunSingle(command.substr(0,i), fi, fd);
+            command.erase(0,i+1);
+            fi = -1;
+            i=0;
+        }
+        else if (command[i] == '>')
+        {   
+            // Add output file name and run
+            fd = OpenFile(command, i, false);
+            RunSingle(command.substr(0,i), fi, fd);
+            command.erase(0,i+1);
+            fd = -1;
+            i=0;
+        }
+        else if (command[i] == '&')
+        {
+            // Run command simply
+            RunSingle(command.substr(0,i), fi, fd);
+            command.erase(0,i+1);
+            i=0;
+        }
+        
+    }
+
+    // Run any remaining command
+    if(!command.empty())
+        RunSingle(command, fi, fd);
+
+    // Wait for all children to die
+    while(wait(NULL)>0);
     return 0;
 }
 
-// Parse a command at pipes
-// void ParsePipes(string command, char* parsed_pipes[])
-// {
-//     int i=0;
-//     parsed_pipes[i] = " ";
-//     while(parsed_pipes[i] != NULL)
-//     {
-//         parsed_pipes[i] = strsep(&command, "|")
-//     }
-// }
+void RunSingle(string command, int fi, int fd)
+{
+    string args[20]; 
+    char* arg_list[20];
 
-void pipeing(string command, int &fi, int &fd)
+    // format and exec
+    MakeArgList(args, AdjustWhitespace(command,1), arg_list);
+    SpawnChild(arg_list[0], arg_list, fi, fd);
+}
+
+
+void Pipeing(string command, int &fi, int &fd)
 {
     string args[20]; 
     char* arg_list[20];
@@ -137,7 +187,7 @@ void pipeing(string command, int &fi, int &fd)
     pid_t cpid;
     char *envp[] = {path, NULL};
 
-    // parse int left and right of '|'
+    // Parse left and right of '|'
     string command1 = AdjustWhitespace(command.substr(0,command.find('|')),1);
     string command2 = AdjustWhitespace(command.substr(command.find('|')+1, command.size()),1);
     if(pipe(pipefd) == -1){
@@ -145,11 +195,12 @@ void pipeing(string command, int &fi, int &fd)
         exit(EXIT_FAILURE);
     }
 
+    // Fork
     cpid = fork();
     if(cpid == 0)
     {
         close(pipefd[0]);       // close read end
-        dup2(pipefd[1],1);      //send stdout to pipe
+        dup2(pipefd[1],1);      // send stdout to pipe
         close(pipefd[1]);       // descriptor no longer needed
 
         MakeArgList(args, command1, arg_list);
@@ -158,14 +209,14 @@ void pipeing(string command, int &fi, int &fd)
         exit(EXIT_FAILURE);
     }
     else
-    {
+    {   // Second Fork
         int cpid2 = fork();
         if(cpid2 == 0)
         {
             close(pipefd[1]);   //close write
             dup2(pipefd[0], 0);
             close(pipefd[0]);
-            dup2(fd, 1);
+            //dup2(stout, 1);
 
             MakeArgList(args, command2, arg_list);
             execvpe(arg_list[0], arg_list, envp);
@@ -182,83 +233,40 @@ void pipeing(string command, int &fi, int &fd)
     }   
 }
 
-void RunParallel(string args[], string command, char* arg_list[])
-{
-    size_t pos =0;
-    string f_in, f_out;
-    int fi = -1, fd = -1;
-
-    // Run any commands before the '&'
-    for(; pos < command.size(); pos++)
-    {
-        if (command[pos] == '&')
-        {
-            // Parse command, spawn child, peform cleanup
-            MakeArgList(args, AdjustWhitespace(command.substr(0,pos),1), arg_list);
-            SpawnChild(arg_list[0], arg_list, fi, fd);
-            command.erase(0,pos+1);
-            f_in.clear();
-            f_out.clear();
-            pos = 0;
-        }
-        else if (command[pos] == '>')
-        {
-            // Add input file name
-            f_out = GetFileName(command, pos);
-            fd = open(f_out.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_TRUNC, S_IRUSR | S_IWUSR);
-            if(fd == -1)
-            {
-                perror("errno");
-                exit(EXIT_FAILURE);
-            }
-            pos--;
-        }
-        else if (command[pos] == '<')
-        {
-            // Add output file name
-            f_in = GetFileName(command, pos);
-            fi = open(f_in.c_str(), O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
-            if(fi == -1)
-            {
-                perror("errno");
-                exit(EXIT_FAILURE);
-            }
-            pos--;
-        }
-    }
-
-    // Run if any command after '&'
-    if(command.size() > 1)
-    {
-        MakeArgList(args, AdjustWhitespace(command,1), arg_list);
-        SpawnChild(arg_list[0], arg_list, fi, fd);
-    }
-
-    // Wait for all children to die
-    while(wait(NULL)>0);
-}
-
 // Remove the file name from the string "command" and return the file name
-string GetFileName(string &command, size_t pos)
+int OpenFile(string &command, size_t pos, bool input)
 {
+    int fd;
+
     //TODO: throw errors for back to back '>' or '<'
     string filename = AdjustWhitespace(command.substr(pos, command.size()),1);
-    filename = filename.substr(1, filename.find_first_of("&|><",pos)-1);
+    filename = filename.substr(1, filename.find_first_of("&|><",1)-1);
     command.erase(pos,filename.size()+1);
 
+    // Remove leading and trailing spaces
     if(filename[filename.size()-1] == ' ')
         filename.erase(filename.size()-1, 1);
     if(filename[0] == ' ')
         filename.erase(0,1);
 
+    // Check number of arguments
     if(filename.find_first_of(' ') < filename.size())
     {
         cout << "Error in number of arguments" << endl;
         filename.clear();
     }
-    
-    // Cleanup
-    return filename; 
+
+    // Open, check, and return
+    if(!input)
+        fd= open(filename.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_TRUNC, S_IRUSR | S_IWUSR);
+    else
+        fd= open(filename.c_str(), O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    if(fd == -1)
+    {
+        perror("errno");
+        exit(EXIT_FAILURE);
+    }
+    return fd;
 }
 
 // Parse command by spaces, put into args[] and point arg_list** toward it
