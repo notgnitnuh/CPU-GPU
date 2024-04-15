@@ -10,6 +10,8 @@
 using namespace std;
 
 // Custom Types
+enum policy_ID{VSP = 1, PAG = 2, SEG = 3};
+enum fit_algorithm{FF = 1, BF = 2, WF = 3};
 struct process{
     size_t ID;
     size_t arrival_t;
@@ -34,12 +36,16 @@ bool StringToInt(const string& str, size_t& int_val);
 bool ReadWorkloadFile(const string& filename, size_t& num_proccess, vector<process>& processes);
 bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, const size_t& mm_policy, vector<process>& procs);
 
-bool RunVSP(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, vector<process> procs);
+bool StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
 bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
-bool RunSEG(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, vector<process> procs);
+bool StoreSAG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
 void CheckArrivals(const size_t& num_procs, const size_t& sys_clock, const vector<process> &procs, vector<process>& queue);
 void PrintProcStart(const size_t& ID, vector<process>& queue);
 void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, const size_t& num_procs, vector<mem_block>& memory);
 void PrintQueue(const vector<process>& queue);
 void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy);
 void PrintTurnaround(const vector<process>& procs);
+void CleanPages(const process& proc, vector<mem_block>& memory);
+void CleanOther(const process& proc, vector<mem_block>& memory, size_t mm_policy);
+
+bool FirstFit(vector<mem_block>& memory, const process& proc)

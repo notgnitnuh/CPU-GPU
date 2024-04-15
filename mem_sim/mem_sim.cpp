@@ -39,10 +39,18 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
         for(int i=0; i<mem_size/mm_param; i++)
         {
             trash.start = i*mm_param; 
-            trash.end = (i+1)*mm_param;
+            trash.end = (i+1)*mm_param-1;
             trash.ID = 0;
             memory.push_back(trash);
         }
+    }
+    else
+    {
+        // Start with single block for VSP and SEG
+        trash.start = 0;
+        trash.end = mem_size; 
+        trash.ID = 0;
+        memory.push_back(trash);
     }
 
     while(sys_clock < 100000 && !all_procs_done)
@@ -53,24 +61,24 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
         // Check for arrivals
         CheckArrivals(num_procs, sys_clock, procs, input_queue);
 
+        // Check for completions
+        CheckCompletion(procs, sys_clock, num_procs, memory);
+
         // check events and Run according to policy
         switch (mm_policy)
         {
-        case 1:
-            cout << "VSP" << endl;
+        case VSP:
+            StoreVSP(memory, mm_param, input_queue, procs, sys_clock);
             break;
-        case 2:
-            while(StorePAG(memory, mm_param, input_queue, procs, sys_clock));
+        case PAG:
+            StorePAG(memory, mm_param, input_queue, procs, sys_clock);
             break;
-        case 3:
-            cout << "SEG" << endl;
+        case SEG:
+            StoreSEG(memory, mm_param, input_queue, procs, sys_clock);
             break;
         default:
             break;
         }
-
-        // Check for completions
-        CheckCompletion(procs, sys_clock, num_procs, memory);
 
         // Update sys clock to next event
         for(int i=0; i<num_procs; i++)
@@ -84,19 +92,60 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
     return true;
 }
 
-bool RunVSP(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, vector<process> procs)
+bool StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 {
-    return true;
+    size_t max_space = 0;
+
+    // Check for adequate hole
+    for(int i=0; i<queue.size(); i++)
+    {
+        for(int j=0; j<memory.size(); j++)
+        {
+            if(memory[i].ID == 0 && ((memory[i].end - memory[i].start) > max_space))
+                max_space= memory[i].end - memory[i].start;
+
+            if(max_space > queue[i].addrs_total)
+            {
+                switch (fit_alg)
+                {
+                case FF:
+                    FirstFit(memory, queue[i]);
+                    break;
+                
+                default:
+                    break;
+                }
+            }
+        }
+    }
+
+    // 
+    return false;
+}
+
+bool BestFit()
+{
+
+}
+
+bool FirstFit(vector<mem_block>& memory, const process& proc)
+{
+    for(int i=0; i<memory.size(); i++)
+    {
+        return false;
+    }
 }
 
 
 bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 { 
     size_t page_num=0, free_space=0;
-    size_t pages_needed = ceil((float)queue[0].addrs_total/page_size);
+    size_t pages_needed;
+    vector<process>::iterator it=queue.begin();
 
     if(queue.empty())
         return false;
+
     // check amount of free space
     for(int i=0; i<memory.size(); i++)
     {
@@ -104,41 +153,51 @@ bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process
             free_space++;
     }
 
-    // store
-    if(free_space >= queue[0].addrs_total/page_size)
+    while(it!=queue.end())
     {
-        // Fill empty pages
-        for(int i=0; i<memory.size() && page_num < pages_needed; i++)
+        // Reset page details
+        page_num = 0;
+        pages_needed = ceil((float)it->addrs_total/page_size);
+
+        // Store
+        if(free_space >= pages_needed)
         {
-            if(memory[i].ID == 0)
+            // Fill empty pages
+            for(int j=0; j<memory.size() && page_num < pages_needed; j++)
             {
-                memory[i].ID = queue[0].ID;
-                memory[i].part = page_num+1;
-                page_num++;
+                if(memory[j].ID == 0)
+                {
+                    memory[j].ID = it->ID;
+                    memory[j].part = page_num+1;
+                    page_num++;
+                    free_space--;
+                }
             }
-        }
-        // Update events
-        for(int i=0; i<procs.size(); i++)
-        {
-            if(procs[i].ID == queue[0].ID)
+            // Update events
+            for(int j=0; j<procs.size(); j++)
             {
-                procs[i].end_t = sys_clock+procs[i].lifetime;
-                procs[i].next_event = procs[i].end_t;
+                if(procs[j].ID == it->ID)
+                {
+                    procs[j].end_t = sys_clock+procs[j].lifetime;
+                    procs[j].next_event = procs[j].end_t;
+                }
             }
+            // Print and cleanup
+            cout << "MM moves Process " << it->ID << " to memory" << endl;
+            queue.erase(it);
+            PrintQueue(queue);
+            PrintMemMap(memory, 2);
         }
-        cout << "MM moves Process " << queue[0].ID << " to memory" << endl;
-        queue.erase(queue.begin());
-        PrintQueue(queue);
-        PrintMemMap(memory, 2);
+        else
+            it++;
     }
-    else
-        return false;
 
     return true;
 }
 
-bool RunSEG()
+bool StoreSEG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 {
+
     return true;
 }
 
@@ -190,7 +249,8 @@ void PrintProcStart(const size_t& ID, vector<process>& queue)
     PrintQueue(queue);
 }
 
-void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, const size_t& num_procs, vector<mem_block>& memory)
+// Check all processes to see if complete, and clean memory
+void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, const size_t& num_procs, vector<mem_block>& memory, const size_t& mm_policy)
 {
     // Check all processes
     for(int i=0; i<num_procs; i++)
@@ -198,48 +258,110 @@ void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, con
         // Check for completed processes
         if(procs[i].end_t == sys_clock)
         {
-            // Output completion and clean memory
-            cout << "Process " << procs[i].ID << " completes" << endl << "        ";
-            for(int j=0; j<memory.size(); j++)
+            switch (mm_policy)
             {
-                if(memory[j].ID == procs[i].ID)
-                    memory[j].ID = 0;
+            case VSP:
+                CleanOther(procs[i], memory, mm_policy);
+                break;
+            case PAG:
+                CleanPages(procs[i], memory);
+                break;
+            case SEG:
+                CleanOther(procs[i], memory, mm_policy);
+                break;
+            default:
+                break;
             }
-            PrintMemMap(memory, 2);
         }
     }
+}
+
+// Clean pages of completed processes
+void CleanPages(const process& proc, vector<mem_block>& memory)
+{            
+    // Output completion and clean memory
+    cout << "Process " << proc.ID << " completes" << endl << "        ";
+    for(int j=0; j<memory.size(); j++)
+    {
+        if(memory[j].ID == proc.ID)
+            memory[j].ID = 0;
+    }
+    PrintMemMap(memory, 2);
+}
+
+// Clean memory of completed processes
+void CleanOther(const process& proc, vector<mem_block>& memory, size_t mm_policy)
+{  
+    vector<mem_block>::iterator it;
+
+    // Output completion
+    cout << "Process " << proc.ID << " completes" << endl << "        ";
+    for(int j=0; j<memory.size(); j++)
+    {
+        if(memory[j].ID == proc.ID)
+            memory[j].ID = 0;
+    }
+
+    // Combine empty space
+    for(it = memory.begin(); it < memory.end();)
+    {
+        if(it->ID == 0 && (it+1)->ID == 0)
+        {
+            it->end = (it+1)->end;
+            memory.erase(it+1);
+        }
+        else
+            it++;
+    }
+    PrintMemMap(memory, mm_policy);
 }
 
 void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy)
 {
     int ff_start, ff_end;
+    string free_space, seg_page;
+
+    // Choose output text based off of policy
     cout << "Memory Map:" << endl << "        ";
-    switch (mm_policy)
+    switch (mm_policy) 
     {
-    case 1:
-        /* code */
+    case VSP:
+        free_space = ": Hole ";
+        seg_page = "";
         break;
-    case 2:
-        for(int i=0; i<memory.size(); i++)
-        {
-            if(memory[i].ID != 0)
-                cout << "        " << memory[i].start << "-" << memory[i].end -1 << ": Process " << memory[i].ID
-                << " Page " << memory[i].part << endl << "        ";
-            if(memory[i].ID == 0)
-            {
-                ff_start = memory[i].start;
-                while(memory[i].ID == 0 && i < memory.size())
-                {
-                    ff_end = memory[i].end-1;
-                    i++;
-                }
-                cout << "        " << ff_start << "-" << ff_end << ": Free Frame(s)" << endl << "        ";
-            }
-        }
+    case PAG:
+        free_space = ": Free Frames(s)";
+        seg_page = ", Page ";
         break;
-    
+    case SEG: 
+        free_space = " Hole ";
+        seg_page = ", Segment ";
+        break;
     default:
         break;
+    }
+
+    for(int i=0; i<memory.size(); i++)
+    {
+        if(memory[i].ID != 0)
+        {
+            cout << "        " << memory[i].start << "-" << memory[i].end << ": Process " << memory[i].ID;
+            if(seg_page != "")
+                cout << seg_page << memory[i].part;
+            cout << endl << "        ";
+
+        }
+        if(memory[i].ID == 0)
+        {
+            ff_start = memory[i].start;
+            while(memory[i].ID == 0 && i < memory.size())
+            {
+                ff_end = memory[i].end;
+                i++;
+            }
+            i--;
+            cout << "        " << ff_start << "-" << ff_end << free_space << endl << "        ";
+        }
     }
 }
 
@@ -299,7 +421,7 @@ bool ReadWorkloadFile(const string& filename, size_t& num_proccess, vector<proce
 // Convert string to int, return false if unable to
 // stoi will convert as long as first char is number
 // any extra characters just get removed
-// FIXME: may want to adjust later
+// FIXME: may want to adjust later for error checking
 bool StringToInt(const string& str, size_t& int_val)
 {
     try{
