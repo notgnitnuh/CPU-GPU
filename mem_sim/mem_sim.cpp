@@ -96,6 +96,7 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
 {
     size_t max_space = 0;
     vector<process>::iterator it;
+    bool fit_found = false;
 
     // Cycle through queue
     for(it=queue.begin(); it!= queue.end();)
@@ -105,6 +106,26 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
         {
         case FF:
             if(FirstFit(memory, it->addrs_total, it->ID))
+                fit_found = true;
+            else 
+                it++;
+            break;
+        case BF:
+            if(BestFit(memory, it->addrs_total, it->ID))
+                fit_found = true;
+            else 
+                it++;
+        case WF:
+            if(WorstFit(memory, it->addrs_total, it->ID))
+                fit_found = true;
+            else
+                it++;
+            break;
+        default:
+            break;
+        }
+        if (fit_found)
+        {
             {
                 // Update events
                 for(int j=0; j<procs.size(); j++)
@@ -120,24 +141,8 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
                 PrintQueue(queue);
                 PrintMemMap(memory, VSP);
             }
-            else 
-                it++;
-            break;
-        case BF:
-            BestFit(memory, it->addrs_total, it->ID);
-            break;
-        case WF:
-            WorstFit(memory, it->addrs_total, it->ID);
-            break;
-        default:
-            break;
         }
     }
-}
-
-bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
-{
-    return false;
 }
 
 bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
@@ -147,8 +152,8 @@ bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
 
     for(it =memory.begin(); it !=memory.end(); it++)
     {
-        // If hole larger than needed found
-        if(it->end - it->start >= mem && it->ID == 0)
+        // If hole found
+        if(it->end - it->start >= mem-1 && it->ID == 0)
         {
             trash.start = it->start;
             trash.end = it->start + mem-1;
@@ -157,20 +162,92 @@ bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
             memory.emplace(it, trash);
             return true;
         }
-        // If hole of exact size found
-        else if(it->end-it->start == mem-1)
-        {
-            it->ID = ID;
-            return true;
-        }
     }
     // If no hole found
     return false;
 }
 
-bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
+bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
 {
-    return false;
+    vector<mem_block>::iterator it, best = memory.end();
+    mem_block trash;
+    size_t block_size = 0, best_block = 30000;
+
+    for(it =memory.begin(); it !=memory.end(); it++)
+    {
+        block_size = it->end - it->start;
+
+        // check hole size
+        if((it->ID == 0) && block_size >= mem-1)
+        {
+            if(block_size < best_block)
+            {
+                best_block = block_size;
+                best = it;
+            }
+        }
+    }
+
+    // If no hole found
+    if(best == memory.end())
+        return false;
+    
+    // If Best == exact size
+    if(best_block == mem-1)
+    {
+        best->ID = ID;
+        return true;
+    }
+
+    // Place into memory
+    trash.start = best->start;
+    trash.end = best->start + mem-1;
+    trash.ID = ID;
+    best->start = trash.end+1;
+    memory.emplace(best, trash);
+    return true;
+}
+
+
+bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
+{   
+    vector<mem_block>::iterator it, worst = memory.end();
+    mem_block trash;
+    size_t block_size = 0, worst_block = 0;
+
+    for(it =memory.begin(); it !=memory.end(); it++)
+    {
+        block_size = it->end - it->start;
+
+        // Check hole size
+        if((it->ID == 0) && block_size >= mem-1)
+        {
+            if(block_size > worst_block)
+            {
+                worst_block = block_size;
+                worst = it;
+            }
+        }
+    }
+
+    // If no hole found
+    if(worst == memory.end())
+        return false;
+
+    // If worst == exact size
+    if(worst_block == mem-1)
+    {
+        worst->ID = ID;
+        return true;
+    }
+
+    // Place into memory
+    trash.start = worst->start;
+    trash.end = worst->start + mem-1;
+    trash.ID = ID;
+    worst->start = trash.end+1;
+    memory.emplace(worst, trash);
+    return true;
 }
 
 
@@ -320,7 +397,7 @@ void CleanPages(const process& proc, vector<mem_block>& memory)
     PrintMemMap(memory, 2);
 }
 
-// Clean memory of completed processes
+// Clean memory of completed processes for VSP and SEG
 void CleanOther(const process& proc, vector<mem_block>& memory, size_t mm_policy)
 {  
     vector<mem_block>::iterator it;
