@@ -36,16 +36,17 @@ bool StringToInt(const string& str, size_t& int_val);
 bool ReadWorkloadFile(const string& filename, size_t& num_proccess, vector<process>& processes);
 bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, const size_t& mm_policy, vector<process>& procs);
 
-bool StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
+void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
 bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
-bool StoreSAG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
+bool StoreSEG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock);
 void CheckArrivals(const size_t& num_procs, const size_t& sys_clock, const vector<process> &procs, vector<process>& queue);
-void PrintProcStart(const size_t& ID, vector<process>& queue);
-void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, const size_t& num_procs, vector<mem_block>& memory);
+void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, const size_t& num_procs, vector<mem_block>& memory, const size_t& mm_policy);
 void PrintQueue(const vector<process>& queue);
 void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy);
 void PrintTurnaround(const vector<process>& procs);
 void CleanPages(const process& proc, vector<mem_block>& memory);
 void CleanOther(const process& proc, vector<mem_block>& memory, size_t mm_policy);
 
-bool FirstFit(vector<mem_block>& memory, const process& proc)
+bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID);
+bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID);
+bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID);

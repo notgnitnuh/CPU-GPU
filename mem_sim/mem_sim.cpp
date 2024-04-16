@@ -48,7 +48,7 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
     {
         // Start with single block for VSP and SEG
         trash.start = 0;
-        trash.end = mem_size; 
+        trash.end = mem_size-1; 
         trash.ID = 0;
         memory.push_back(trash);
     }
@@ -62,9 +62,9 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
         CheckArrivals(num_procs, sys_clock, procs, input_queue);
 
         // Check for completions
-        CheckCompletion(procs, sys_clock, num_procs, memory);
+        CheckCompletion(procs, sys_clock, num_procs, memory, mm_policy);
 
-        // check events and Run according to policy
+        // check events and run stores according to policy
         switch (mm_policy)
         {
         case VSP:
@@ -92,48 +92,85 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
     return true;
 }
 
-bool StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
+void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 {
     size_t max_space = 0;
+    vector<process>::iterator it;
 
-    // Check for adequate hole
-    for(int i=0; i<queue.size(); i++)
+    // Cycle through queue
+    for(it=queue.begin(); it!= queue.end();)
     {
-        for(int j=0; j<memory.size(); j++)
+        // Call appropriate fit algorithm
+        switch (fit_alg)
         {
-            if(memory[i].ID == 0 && ((memory[i].end - memory[i].start) > max_space))
-                max_space= memory[i].end - memory[i].start;
-
-            if(max_space > queue[i].addrs_total)
+        case FF:
+            if(FirstFit(memory, it->addrs_total, it->ID))
             {
-                switch (fit_alg)
+                // Update events
+                for(int j=0; j<procs.size(); j++)
                 {
-                case FF:
-                    FirstFit(memory, queue[i]);
-                    break;
-                
-                default:
-                    break;
+                    if(procs[j].ID == it->ID)
+                    {
+                        procs[j].end_t = sys_clock+procs[j].lifetime;
+                        procs[j].next_event = procs[j].end_t;
+                    }
                 }
+                cout << "MM moves Process " << it->ID << " to memory" << endl;
+                queue.erase(it);
+                PrintQueue(queue);
+                PrintMemMap(memory, VSP);
             }
+            else 
+                it++;
+            break;
+        case BF:
+            BestFit(memory, it->addrs_total, it->ID);
+            break;
+        case WF:
+            WorstFit(memory, it->addrs_total, it->ID);
+            break;
+        default:
+            break;
         }
     }
+}
 
-    // 
+bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
+{
     return false;
 }
 
-bool BestFit()
+bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
 {
+    vector<mem_block>::iterator it;
+    mem_block trash;
 
+    for(it =memory.begin(); it !=memory.end(); it++)
+    {
+        // If hole larger than needed found
+        if(it->end - it->start >= mem && it->ID == 0)
+        {
+            trash.start = it->start;
+            trash.end = it->start + mem-1;
+            trash.ID = ID;
+            it->start = trash.end+1;
+            memory.emplace(it, trash);
+            return true;
+        }
+        // If hole of exact size found
+        else if(it->end-it->start == mem-1)
+        {
+            it->ID = ID;
+            return true;
+        }
+    }
+    // If no hole found
+    return false;
 }
 
-bool FirstFit(vector<mem_block>& memory, const process& proc)
+bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
 {
-    for(int i=0; i<memory.size(); i++)
-    {
-        return false;
-    }
+    return false;
 }
 
 
@@ -242,12 +279,6 @@ void CheckArrivals(const size_t& num_procs, const size_t& sys_clock, const vecto
 
 }
 
-void PrintProcStart(const size_t& ID, vector<process>& queue)
-{
-    cout << "MM moves Process " << ID << " to memory" << endl;
-    queue.erase(queue.begin());
-    PrintQueue(queue);
-}
 
 // Check all processes to see if complete, and clean memory
 void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, const size_t& num_procs, vector<mem_block>& memory, const size_t& mm_policy)
@@ -303,7 +334,7 @@ void CleanOther(const process& proc, vector<mem_block>& memory, size_t mm_policy
     }
 
     // Combine empty space
-    for(it = memory.begin(); it < memory.end();)
+    for(it = memory.begin(); it < memory.end()-1;)
     {
         if(it->ID == 0 && (it+1)->ID == 0)
         {
