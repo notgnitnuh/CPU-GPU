@@ -1,5 +1,8 @@
 #include "mem_sim.h"
 
+size_t system_timeout = 100000;
+size_t max_memory = 30000;
+
 int main()
 {
     size_t num_procs = 0;
@@ -17,18 +20,20 @@ int main()
         cout << "Error reading workload file" << endl;
         return 1;
     }
-
-    RunProcesses(mem_size, mm_param, num_procs, mm_policy, procs);
+    if(!RunProcesses(mem_size, mm_param, num_procs, mm_policy, procs))
+    {
+        cout << "Error running processes" << endl;
+    }
     PrintTurnaround(procs);
 
     return 0;
 }
 
+// Set up initial variables and run program loop until finished or timed out
 bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, const size_t& mm_policy, vector<process>& procs)
 {
     vector<mem_block> memory;
     vector<process> input_queue; 
-    bool all_procs_done = false;
     size_t next_event, sys_clock = 0;
     string output_str; 
     mem_block trash;
@@ -53,18 +58,18 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
         memory.push_back(trash);
     }
 
-    while(sys_clock < 100000 && !all_procs_done)
+    while(sys_clock < system_timeout)
     {
-        next_event = 100000;
+        next_event = system_timeout;
         cout << "t = " << sys_clock << ": ";
 
-        // Check for arrivals
+        // Check for process arrivals
         CheckArrivals(num_procs, sys_clock, procs, input_queue);
 
-        // Check for completions
+        // Check for process completions
         CheckCompletion(procs, sys_clock, num_procs, memory, mm_policy);
 
-        // check events and run stores according to policy
+        // check events and store processes in memory according to policy
         switch (mm_policy)
         {
         case VSP:
@@ -77,7 +82,8 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
             StoreSEG(memory, mm_param, input_queue, procs, sys_clock);
             break;
         default:
-            break;
+            cout << "Unknown Memory Management Policy" << endl;
+            return false;
         }
 
         // Update sys clock to next event
@@ -92,6 +98,7 @@ bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& 
     return true;
 }
 
+// Try to store processes from queue using VSP
 void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 {
     size_t max_space = 0;
@@ -102,25 +109,18 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
     for(it=queue.begin(); it!= queue.end();)
     {
         // Call appropriate fit algorithm
-        switch (fit_alg)
-        {
+        switch (fit_alg){
         case FF:
-            if(FirstFit(memory, it->addrs_total, it->ID))
+            if(FirstFit(memory, it->addrs_total, it->ID, 1))
                 fit_found = true;
-            else 
-                it++;
             break;
         case BF:
-            if(BestFit(memory, it->addrs_total, it->ID))
+            if(BestFit(memory, it->addrs_total, it->ID, 1))
                 fit_found = true;
-            else 
-                it++;
             break;
         case WF:
-            if(WorstFit(memory, it->addrs_total, it->ID))
+            if(WorstFit(memory, it->addrs_total, it->ID, 1))
                 fit_found = true;
-            else
-                it++;
             break;
         default:
             break;
@@ -128,7 +128,7 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
         if (fit_found)
         {
             {
-                // Update events
+                // Update event times if process loaded
                 for(int j=0; j<procs.size(); j++)
                 {
                     if(procs[j].ID == it->ID)
@@ -143,17 +143,17 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
                 PrintMemMap(memory, VSP);
             }
         }
+        else    // Only increment when not deleting from queue
+            it++;
     }
 }
 
+// Try to store processes from queue using PAG
 bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 { 
     size_t page_num=0, free_space=0;
     size_t pages_needed;
-    vector<process>::iterator it=queue.begin();
-
-    if(queue.empty())
-        return false;
+    vector<process>::iterator it;
 
     // check amount of free space
     for(int i=0; i<memory.size(); i++)
@@ -162,7 +162,7 @@ bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process
             free_space++;
     }
 
-    while(it!=queue.end())
+    for(it=queue.begin(); it!=queue.end();)
     {
         // Reset page details
         page_num = 0;
@@ -197,35 +197,92 @@ bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process
             PrintQueue(queue);
             PrintMemMap(memory, 2);
         }
-        else
+        else    // Only increment when not deleting from queue
             it++;
     }
-
     return true;
 }
 
+// Try to store processes from queue using SEG
 bool StoreSEG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 {
+    vector<process>::iterator it;
+    bool fit_found;
 
-    return false;
+    // Cycle through queue
+    for(it=queue.begin(); it!= queue.end();)
+    {
+        fit_found = true;
+
+        // Call appropriate fit algorithm
+        switch (fit_alg){
+        case FF:
+            for(int i=0; i<it->num_addrs && fit_found; i++)
+                fit_found = FirstFit(memory, it->addrs[i], it->ID, i);
+            break;
+        case BF:
+            for(int i=0; i<it->num_addrs && fit_found; i++)
+                fit_found = BestFit(memory, it->addrs[i], it->ID, i);
+            break;
+        case WF:
+            for(int i=0; i<it->num_addrs && fit_found; i++)
+                fit_found = WorstFit(memory, it->addrs[i], it->ID, i);
+            break;
+        default:
+            break;
+        }
+        if (fit_found)
+        {
+            {
+                // Update events if process stored in memory
+                for(int j=0; j<procs.size(); j++)
+                {
+                    if(procs[j].ID == it->ID)
+                    {
+                        procs[j].end_t = sys_clock+procs[j].lifetime;
+                        procs[j].next_event = procs[j].end_t;
+                    }
+                }
+                cout << "MM moves Process " << it->ID << " to memory" << endl;
+                queue.erase(it);
+                PrintQueue(queue);
+                PrintMemMap(memory, SEG);
+            }
+        }
+        else
+        {
+            // Increment if no queue deletion, and ensure there isn't part of a process in memory
+            it++;
+            CleanOther(*it, memory);
+        }
+    }
 }
 
 // Store in first available block of memory
-bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
+bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID, const size_t& part)
 {
     vector<mem_block>::iterator it;
     mem_block trash;
 
+    // Cycle through memory
     for(it = memory.begin(); it != memory.end(); it++)
     {
         // If hole found
-        if((it->end - it->start >= mem-1) && (it->ID == 0))
+        if((it->end - it->start > mem-1) && (it->ID == 0))
         {
             trash.start = it->start;
             trash.end = it->start + mem-1;
             trash.ID = ID;
+            trash.part = part;
             it->start = trash.end+1;
             memory.emplace(it, trash);
+            return true;
+        }
+        // If perfect fit found
+        else if(it->end - it->start == mem-1 && it->ID == 0)
+        {
+            it->ID = ID;
+            it->part = part;
             return true;
         }
     }
@@ -234,17 +291,19 @@ bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
 }
 
 // Store in snuggest open block of memory
-bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
+bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID, const size_t& part)
 {
     vector<mem_block>::iterator it, best = memory.end();
     mem_block trash;
-    size_t block_size = 0, best_block = 30000;
+    size_t block_size = 0, best_block = max_memory;
 
+    // Loop through memory blocks
     for(it = memory.begin(); it != memory.end(); it++)
     {
+        // Determine block size
         block_size = it->end - it->start;
 
-        // check for larger hole size
+        // check for larger hole than needed
         if((it->ID == 0) && (block_size > mem-1))
         {
             if(block_size < best_block)
@@ -253,10 +312,11 @@ bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
                 best = it;
             }
         }
-        // Check for exact fit
+        // Check for exact fit, and exit if found (can't get better)
         else if (it->ID == 0 && block_size == mem-1)
         {
-            best->ID = ID;
+            it->ID = ID;
+            it->part = part;
             return true;
         }
     }
@@ -265,28 +325,30 @@ bool BestFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
     if(best == memory.end())
         return false;
     
-
     // Place into memory
     trash.start = best->start;
     trash.end = best->start + mem-1;
     trash.ID = ID;
+    trash.part = part;
     best->start = trash.end+1;
     memory.emplace(best, trash);
     return true;
 }
 
 // Store in most open block of memory
-bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
+bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID, const size_t& part)
 {   
     vector<mem_block>::iterator it, worst = memory.end();
     mem_block trash;
     size_t block_size = 0, worst_block = 0;
 
-    for(it =memory.begin(); it !=memory.end(); it++)
+    // Loop through memory blocks
+    for(it = memory.begin(); it != memory.end(); it++)
     {
+        // Determine size of block
         block_size = it->end - it->start;
 
-        // Check hole size
+        // Check for big enough hole
         if((it->ID == 0) && block_size >= mem-1)
         {
             if(block_size > worst_block)
@@ -301,10 +363,11 @@ bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
     if(worst == memory.end())
         return false;
 
-    // If worst == exact size
+    // If worst fit == exact size
     if(worst_block == mem-1)
     {
         worst->ID = ID;
+        worst->part = part;
         return true;
     }
 
@@ -312,6 +375,7 @@ bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID)
     trash.start = worst->start;
     trash.end = worst->start + mem-1;
     trash.ID = ID;
+    trash.part = part;
     worst->start = trash.end+1;
     memory.emplace(worst, trash);
     return true;
@@ -368,6 +432,7 @@ void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, con
         // Check for completed processes
         if(procs[i].end_t == sys_clock)
         {
+            cout << "Process " << procs[i].ID << " completes" << endl << "        ";
             switch (mm_policy)
             {
             case VSP:
@@ -391,8 +456,7 @@ void CheckCompletion( const vector<process> &procs, const size_t& sys_clock, con
 // Clean pages of completed processes
 void CleanPages(const process& proc, vector<mem_block>& memory)
 {            
-    // Output completion and clean memory
-    cout << "Process " << proc.ID << " completes" << endl << "        ";
+    // Clear proc ID from page table
     for(int j=0; j<memory.size(); j++)
     {
         if(memory[j].ID == proc.ID)
@@ -406,8 +470,7 @@ void CleanOther(const process& proc, vector<mem_block>& memory)
 {  
     vector<mem_block>::iterator it;
 
-    // Output completion
-    cout << "Process " << proc.ID << " completes" << endl << "        ";
+    // Clean ID from memory
     for(int j=0; j<memory.size(); j++)
     {
         if(memory[j].ID == proc.ID)
@@ -433,19 +496,19 @@ void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy)
     string free_space, seg_page;
 
     // Choose output text based off of policy
-    cout << "Memory Map:" << endl << "        ";
+    cout << "Memory Map: " << endl << "        ";
     switch (mm_policy) 
     {
     case VSP:
-        free_space = ": Hole ";
+        free_space = ": Hole";
         seg_page = "";
         break;
     case PAG:
-        free_space = ": Free Frames(s)";
+        free_space = ": Free Frame(s)";
         seg_page = ", Page ";
         break;
     case SEG: 
-        free_space = " Hole ";
+        free_space = ": Hole";
         seg_page = ", Segment ";
         break;
     default:
@@ -543,14 +606,12 @@ bool StringToInt(const string& str, size_t& int_val)
     }
 }
 
-
+// Print the turn around for each process
 void PrintTurnaround(const vector<process>& procs)
 {
-    float avg_trd = 0;
+    float avg_turn = 0;
     for(int i=0; i<procs.size(); i++)
-    {
-        avg_trd += procs[i].end_t - procs[i].arrival_t;
-    }
-    avg_trd = float(avg_trd/procs.size());
-    cout << "Average Turnaround Time: " << fixed << setprecision(1) << avg_trd << endl;
+        avg_turn += procs[i].end_t - procs[i].arrival_t;
+    avg_turn = float(avg_turn/procs.size());
+    cout << "Average Turnaround Time: " << fixed << setprecision(1) << avg_turn << endl;
 }
