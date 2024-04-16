@@ -490,6 +490,7 @@ void CleanOther(const process& proc, vector<mem_block>& memory)
     }
 }
 
+// Print the memory and its contents
 void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy)
 {
     int ff_start, ff_end;
@@ -515,18 +516,19 @@ void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy)
         break;
     }
 
+    // Output memory and what resides where
     for(int i=0; i<memory.size(); i++)
     {
         if(memory[i].ID != 0)
         {
             cout << "        " << memory[i].start << "-" << memory[i].end << ": Process " << memory[i].ID;
             if(seg_page != "")
-                cout << seg_page << memory[i].part;
+                cout << seg_page << memory[i].part; // This part doesn't exist for VSP
             cout << endl << "        ";
-
         }
         if(memory[i].ID == 0)
         {
+            // Combine consecutive free memory (primarily for paging)
             ff_start = memory[i].start;
             while(memory[i].ID == 0 && i < memory.size())
             {
@@ -539,6 +541,7 @@ void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy)
     }
 }
 
+// Print the ID's of processes in the queue
 void PrintQueue(const vector<process>& queue)
 {
     cout << "        Input Queue:[";
@@ -568,7 +571,7 @@ bool ReadWorkloadFile(const string& filename, size_t& num_proccess, vector<proce
     fin >> input_str;
     StringToInt(input_str, num_proccess);
 
-    // Read each process into process vector
+    // Read each process into a process vector
     for(size_t i=0; i<num_proccess; i++)
     {
         holding.addrs.clear();
