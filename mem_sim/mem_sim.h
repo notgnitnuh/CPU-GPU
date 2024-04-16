@@ -45,7 +45,7 @@ void PrintQueue(const vector<process>& queue);
 void PrintMemMap(const vector<mem_block>& memory, const size_t& mm_policy);
 void PrintTurnaround(const vector<process>& procs);
 void CleanPages(const process& proc, vector<mem_block>& memory);
-void CleanOther(const process& proc, vector<mem_block>& memory, size_t mm_policy);
+void CleanOther(const process& proc, vector<mem_block>& memory);
 
 bool FirstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID);
 bool WorstFit(vector<mem_block>& memory, const size_t& mem, const size_t& ID);
