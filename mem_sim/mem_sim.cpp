@@ -1,8 +1,5 @@
 #include "mem_sim.h"
 
-size_t system_timeout = 100000;
-size_t max_memory = 30000;
-
 int main()
 {
     size_t num_procs = 0;
@@ -33,7 +30,7 @@ int main()
 bool RunProcesses(const size_t& mem_size, const size_t &mm_param, const size_t& num_procs, const size_t& mm_policy, vector<process>& procs)
 {
     vector<mem_block> memory;
-    vector<process> input_queue; 
+    vector<process> input_queue; // TODO: Could be improved and turned into pointers to the procs vector
     size_t next_event, sys_clock = 0;
     string output_str; 
     mem_block trash;
@@ -149,7 +146,7 @@ void StoreVSP(vector<mem_block>& memory, const size_t &fit_alg, vector<process>&
 }
 
 // Try to store processes from queue using PAG
-bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
+void StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 { 
     size_t page_num=0, free_space=0;
     size_t pages_needed;
@@ -200,11 +197,10 @@ bool StorePAG(vector<mem_block>& memory, const size_t &page_size, vector<process
         else    // Only increment when not deleting from queue
             it++;
     }
-    return true;
 }
 
 // Try to store processes from queue using SEG
-bool StoreSEG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
+void StoreSEG(vector<mem_block>& memory, const size_t &fit_alg, vector<process>& queue, vector<process>& procs, const size_t& sys_clock)
 {
     vector<process>::iterator it;
     bool fit_found;
