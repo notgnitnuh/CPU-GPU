@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/mnt/c/Dev/CENG458/build",
+  "command": "/usr/bin/g++    -g   -o CMakeFiles/dils.dir/dils.cpp.o -c /mnt/c/Dev/CENG458/File_sys/dils.cpp",
+  "file": "/mnt/c/Dev/CENG458/File_sys/dils.cpp"
+},
+{
+  "directory": "/mnt/c/Dev/CENG458/build",
+  "command": "/usr/bin/gcc   -g   -o CMakeFiles/dils.dir/sfs_code/driver.c.o   -c /mnt/c/Dev/CENG458/File_sys/sfs_code/driver.c",
+  "file": "/mnt/c/Dev/CENG458/File_sys/sfs_code/driver.c"
+}
+]
