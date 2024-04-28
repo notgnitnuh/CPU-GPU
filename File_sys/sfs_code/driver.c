@@ -1,5 +1,5 @@
 
-#include <driver.h>
+#include "driver.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -30,7 +30,7 @@ void driver_detach_disk_image()
 /* function to read a block from the disk image */
 void driver_read(void *ptr, uint32_t block_num)
 {
-  if(lseek(fd, block_num * blksize, SEEK_SET) == -1)
+  if(lseek(fd, (1+block_num) * blksize, SEEK_SET) == -1)
     {
       perror("Driver failed to read block");
       exit(1);
@@ -46,7 +46,7 @@ void driver_read(void *ptr, uint32_t block_num)
 /* function to write a block to the disk image */
 void driver_write(void *ptr, uint32_t block_num)
 {
-  if(lseek(fd, block_num * blksize, SEEK_SET) == -1)
+  if(lseek(fd, (1+block_num) * blksize, SEEK_SET) == -1)
     {
       perror("Driver failed to read block");
       exit(1);
