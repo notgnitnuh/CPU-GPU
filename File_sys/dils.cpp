@@ -36,7 +36,6 @@ int main(int argc, char **argv)
     if(super->fsmagic == VMLARIX_SFS_MAGIC && !strcmp(super->fstypestr,VMLARIX_SFS_TYPESTR))
     {
       printf("superblock found at block %d!\n", i);
-      PrintSuperblock(super); //FIXME: remove after testing
       if(argc == 2)
         ShortListing(super);
       else
@@ -110,7 +109,7 @@ void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_n
       cout << perms[i];
     mask = mask >> 1;
   }
-  cout << " " << right << 1;
+  cout << " " << right << unsigned(inode.refcount);
   cout << setw(7) << inode.owner;
   cout << setw(7) << inode.group;
   cout << setw(8) << inode.size;
@@ -121,18 +120,12 @@ void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_n
 
 void ShortListing(sfs_superblock *super)
 {
-  char raw_block[128];
-  bool new_entry = true;
-  uint32_t block = super->rootdir;
-  sfs_dirent dirents[4];
-  int num_files = super->num_inodes - super->inodes_free;
   uint32_t start_block=super->rootdir;
   char fname[28];
-  sfs_inode *inode = (sfs_inode*)raw_block; // Grabs second inode from block 
-  // bitmap_t *test = (bitmap_t*)raw_block;
 
   // Loop for number of used inodes
-  for(int i=0; i<super->num_inodes-super->inodes_free; i++)
+  cout << ".\n..\n";
+  for(int i=1; i<super->num_inodes-super->inodes_free; i++)
   {
     // Read a block into 4 sfs_dirents 
     GetFileName(fname, i, super, &start_block);
@@ -162,19 +155,6 @@ void GetFileName(char* fname, uint32_t inode, sfs_superblock *super, uint32_t *s
   }
 }
 
-/* Functions below this point are for testing by priting structures*/
-void PrintBitMap(bitmap_t *bitmap)
-{
-  uint32_t temp;
-  uint32_t test = 416;
-  
-  for(int i=31; i>=0; i--)
-  {
-    temp = get_bit(bitmap, i);
-    cout << temp;
-  }
-}
-
 void ReadDirectories(uint32_t block, sfs_dirent* dirents)
 {
   char raw_block[128];
@@ -201,62 +181,4 @@ bool CheckNULL(char c)
       return true;
   }
   return false;
-}
-
-
-void PrintBlock(uint32_t block)
-{
-  char raw_block[128];
-  bool new_line = true;
-
-  driver_read(raw_block, block);
-  for(int i=0; i<128; i++)
-  {
-    cout << raw_block[i];
-  }
-  cout << endl;
-}
-void PrintSuperblock(sfs_superblock *super)
-{
-  cout << "fsmagic: " << super->fsmagic << endl;
-  cout << "fstypestr: " << super->fstypestr << endl;
-  cout << "block_size: " << super->block_size << endl;
-  cout << "sectorsperblock: " << super->sectorsperblock << endl;
-  cout << "superblock: " << super->superblock << endl;
-  cout << "num_blocks: " << super->num_blocks << endl;
-  cout << "fb_bitmap: " << super->fb_bitmap << endl;
-  cout << "fb_bitmapblocks: " << super->fb_bitmapblocks << endl;
-  cout << "blocks_free: " << super->blocks_free << endl;
-  cout << "num_inodes: " << super->num_inodes << endl;
-  cout << "fi_bitmap: " << super->fi_bitmap << endl;
-  cout << "fi_bitmapblocks: " << super->fi_bitmapblocks << endl;
-  cout << "inodes_free: " << super->inodes_free << endl;
-  cout << "num_inode_blocks: " << super->num_inode_blocks << endl;
-  cout << "inodes: " << super->inodes << endl;
-  cout << "rootdir: " << super->rootdir << endl;
-  cout << "open_count: " << super->open_count << endl << endl;
-}
-void PrintInode(sfs_inode inode)
-{
-  cout << "owner: " << inode.owner << endl;
-  cout << "group: " << inode.group << endl;
-  cout << "ctime: " << inode.ctime << endl;
-  cout << "mtime: " << inode.mtime << endl;
-  cout << "atime: " << inode.atime << endl;
-  cout << "perm: " << inode.perm << endl;
-  cout << "type: " << inode.type << endl;
-  cout << "refcount: " << inode.refcount << endl;
-  cout << "size: " << inode.size << endl;
-  cout << "direct: ";
-  for(int i=0; i<5; i++)
-   cout << inode.direct[i] << " ";
-  cout << endl;
-  cout << "indirect: " << inode.indirect << endl;
-  cout << "dindirect: " << inode.dindirect << endl;
-  cout << "tindirect: " << inode.tindirect << endl << endl;
-}
-void PrintDir(sfs_dirent dir)
-{
-  cout << "name: " << dir.name << endl;
-  cout << "inode: " << dir.inode << endl;
 }

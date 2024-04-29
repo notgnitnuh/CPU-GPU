@@ -12,12 +12,7 @@ extern "C"{
 #include <unistd.h>
 #include <ctime>
 
-// FIXME: Print functions for testing, remove once done
-void PrintSuperblock(sfs_superblock *super);
-void PrintInode(sfs_inode inode);
-void PrintDir(sfs_dirent dir);
-void PrintBlock(uint32_t block);
-void PrintBitMap(bitmap_t *bitmap);
+
 
 
 void LongListing(sfs_superblock *super);
