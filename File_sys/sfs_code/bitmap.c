@@ -1,6 +1,6 @@
 // Warning!  This code has not been thoroughly tested
 
-#include <bitmap.h>
+#include "bitmap.h"
 
 /* set a specific bit within a bitmap_t */
 void set_bit_unit(bitmap_t *word, uint32_t bit)
@@ -14,7 +14,7 @@ void set_bit_unit(bitmap_t *word, uint32_t bit)
 void clear_bit_unit(bitmap_t *word, uint32_t bit)
 {
   bitmap_t mask = 1;
-  mask <<= bit; 
+  mask <<= bit;
   *word &= ~mask;
 }
 
@@ -75,4 +75,3 @@ int32_t first_cleared(bitmap_t *bitmap, uint32_t size)
     return -1;
   return i;
 }
-

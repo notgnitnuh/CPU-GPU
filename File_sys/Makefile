@@ -150,6 +150,33 @@ dils.cpp.s:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/dils.cpp.s
 .PHONY : dils.cpp.s
 
+sfs_code/bitmap.o: sfs_code/bitmap.c.o
+
+.PHONY : sfs_code/bitmap.o
+
+# target to build an object file
+sfs_code/bitmap.c.o:
+	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/bitmap.c.o
+.PHONY : sfs_code/bitmap.c.o
+
+sfs_code/bitmap.i: sfs_code/bitmap.c.i
+
+.PHONY : sfs_code/bitmap.i
+
+# target to preprocess a source file
+sfs_code/bitmap.c.i:
+	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/bitmap.c.i
+.PHONY : sfs_code/bitmap.c.i
+
+sfs_code/bitmap.s: sfs_code/bitmap.c.s
+
+.PHONY : sfs_code/bitmap.s
+
+# target to generate assembly for a file
+sfs_code/bitmap.c.s:
+	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/bitmap.c.s
+.PHONY : sfs_code/bitmap.c.s
+
 sfs_code/driver.o: sfs_code/driver.c.o
 
 .PHONY : sfs_code/driver.o
@@ -189,6 +216,9 @@ help:
 	@echo "... dils.o"
 	@echo "... dils.i"
 	@echo "... dils.s"
+	@echo "... sfs_code/bitmap.o"
+	@echo "... sfs_code/bitmap.i"
+	@echo "... sfs_code/bitmap.s"
 	@echo "... sfs_code/driver.o"
 	@echo "... sfs_code/driver.i"
 	@echo "... sfs_code/driver.s"
