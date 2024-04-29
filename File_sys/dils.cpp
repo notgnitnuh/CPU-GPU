@@ -59,10 +59,8 @@ int main(int argc, char **argv)
 void LongListing(sfs_superblock *super)
 {
   char raw_block[2][128];
-  sfs_inode *inode = (sfs_inode*)raw_block[0]; // Grabs second inode from block 
-  sfs_dirent *dir = (sfs_dirent *)raw_block[1];
-  sfs_dirent dirents[4];
-  char *name = "add name";
+  sfs_inode *inode = (sfs_inode*)raw_block[0]; // Grabs two inodes from block
+  sfs_dirent *dir = (sfs_dirent *)raw_block[1]; // Grab 4 dirs from block, no used, but removing causes seg fault?!?
 
   // int fo = open("test.txt", O_RDWR);
   // dup2(fo,1);
@@ -73,22 +71,30 @@ void LongListing(sfs_superblock *super)
   for(int i=0; i<super->num_inode_blocks - super->inodes_free/2-1; i++)
   {
     driver_read(inode, super->inodes+i);
-    PrintInodeLongList(inode[0], name);
-    PrintInodeLongList(inode[1], name);
+    PrintInodeLongList(inode[0], super, i*2);
+    PrintInodeLongList(inode[1], super, i*2+1);
   }
   driver_read(inode, super->inodes + super->num_inode_blocks - super->inodes_free/2 - 1 );
-  PrintInodeLongList(inode[0], name);
   if((super->num_inodes - super->inodes_free) % 2 != 1)
-    PrintInodeLongList(inode[1], name);
+  {
+    PrintInodeLongList(inode[0], super, super->num_inodes - super->inodes_free-2);
+    PrintInodeLongList(inode[1], super, super->num_inodes - super->inodes_free-1);
+  }
+  else
+    PrintInodeLongList(inode[0], super, super->num_inodes - super->inodes_free-1);
+    
 }
 
-void PrintInodeLongList(sfs_inode inode, char* f_name)
+void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_num)
 {
+  char* f_name;
   string perms = "drwxrwxrwx";
   uint16_t mask = 0b100000000;
   time_t t = (time_t)inode.atime;
   string atime = (string)ctime(&t);
   
+  GetFileName(f_name, inode_num, super, &super->rootdir);
+
   if(inode.type == FT_DIR)
     cout << "d";
   else 
@@ -109,6 +115,7 @@ void PrintInodeLongList(sfs_inode inode, char* f_name)
   cout << " " << atime.substr(4,12) << atime.substr(19,5);
   cout << " " << left << f_name << endl;
 }
+
 
 void GetFileBlock(sfs_inode_t * node, size_t blockNumber, void* data)
 {
@@ -159,8 +166,61 @@ void ShortListing(sfs_superblock *super)
   bool new_entry = true;
   uint32_t block = super->rootdir;
   sfs_dirent dirents[4];
+  int num_files = super->num_inodes - super->inodes_free;
+  uint32_t start_block=super->rootdir;
+  char fname[28];
   sfs_inode *inode = (sfs_inode*)raw_block; // Grabs second inode from block 
+  // bitmap_t *test = (bitmap_t*)raw_block;
 
+  // Loop for number of used inodes
+  for(int i=0; i<super->num_inodes-super->inodes_free; i++)
+  {
+    // Read a block into 4 sfs_dirents 
+    GetFileName(fname, i, super, &start_block);
+    cout << fname << endl;
+  }
+}
+
+/* Very slow and inefficient method of finding file names. I'm sure there is a better way to do this
+   But my brain isn't working... so I guess it is what it is. */
+void GetFileName(char* fname, uint32_t inode, sfs_superblock *super, uint32_t *start_block)
+{
+  sfs_dirent dirents[4];
+  strcpy(fname, "nada");
+  for(uint32_t i=*start_block; i<super->num_blocks; i++)
+  {
+    // Read a block into 4 sfs_dirents 
+    ReadDirectories(i, dirents);
+    for(int j=0; j<4; j++)
+    {
+      if(dirents[j].inode == inode)
+      {
+        // fname = dirents[j].name;
+        strcpy(fname, dirents[j].name);
+        return;
+      }
+    }
+  }
+}
+
+/* Functions below this point are for testing by priting structures*/
+void PrintBitMap(bitmap_t *bitmap)
+{
+  uint32_t temp;
+  uint32_t test = 416;
+  
+  for(int i=31; i>=0; i--)
+  {
+    temp = get_bit(bitmap, i);
+    cout << temp;
+  }
+}
+
+void ReadDirectories(uint32_t block, sfs_dirent* dirents)
+{
+  char raw_block[128];
+  int j=0, k=0;
+  
   // Read a block into 4 sfs_dirents 
   for(int i=0; i<4; i++)
   {
@@ -168,41 +228,9 @@ void ShortListing(sfs_superblock *super)
     for(int j=0; j<28; j++)
       dirents[i].name[j] = raw_block[i*32+j];
     dirents[i].inode = raw_block[i*32+31]<<24 | raw_block[i*32+30] << 16 | raw_block[i*32+29] << 8 | raw_block[i*32+28];
-    PrintDir(dirents[i]);
-    driver_read(inode, super->inodes + dirents[i].inode);
-    PrintInode(inode[0]);
-  }
-}
-
-void ReadDirectories(uint32_t node, sfs_dirent* dirents)
-{
-  char raw_block[128];
-  int j=0, k=0;
-  
-  // FIXME: make this thing work, having issues with null spaces
-  driver_read(raw_block, node);
-  for(int i=0; i<4;i++)
-  {
-    k=j;
-    // Load nonNULL chars
-    while(!CheckNULL(raw_block[j]))
-    {
-      dirents[i].name[j-k] = raw_block[j];
-      j++;
-    }
-    // add NULL terminator & inode number
-    dirents[i].name[j-k] = NULL;
-    j++;
-    dirents[i].inode = raw_block[j];
-    j++;
-
-    // Cycle through to 
-    while(CheckNULL(raw_block[j]))
-    {
-      j++;
-      if(j>64)
-        i=5;
-    }
+    // PrintDir(dirents[i]);
+    // driver_read(inode, super->inodes + dirents[i].inode);
+    // PrintInode(inode[0]);
   }
 }
 
@@ -216,17 +244,7 @@ bool CheckNULL(char c)
   return false;
 }
 
-void PrintBitMap(bitmap_t *bitmap)
-{
-  uint32_t temp;
-  cout << BITMAP_BITS << endl;
-  for(int i=0; i<BITMAP_BITS; i++)
-  {
-    temp = get_bit(bitmap, i);
-    cout << temp;
-  }
-}
-/* Print the contents of a single block*/
+
 void PrintBlock(uint32_t block)
 {
   char raw_block[128];
@@ -239,7 +257,6 @@ void PrintBlock(uint32_t block)
   }
   cout << endl;
 }
-/* This function outputs the super blocks info, purely for testing */
 void PrintSuperblock(sfs_superblock *super)
 {
   cout << "fsmagic: " << super->fsmagic << endl;
@@ -279,9 +296,8 @@ void PrintInode(sfs_inode inode)
   cout << "dindirect: " << inode.dindirect << endl;
   cout << "tindirect: " << inode.tindirect << endl << endl;
 }
-
 void PrintDir(sfs_dirent dir)
 {
   cout << "name: " << dir.name << endl;
-  cout << "inode: " << dir.inode << endl << endl;
+  cout << "inode: " << dir.inode << endl;
 }

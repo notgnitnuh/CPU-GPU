@@ -22,6 +22,7 @@ void PrintBitMap(bitmap_t *bitmap);
 
 void LongListing(sfs_superblock *super);
 void ShortListing(sfs_superblock *super);
-void ReadDirectories(uint32_t node, sfs_dirent* dirents);
+void ReadDirectories(uint32_t block, sfs_dirent* dirents);
 bool CheckNULL(char c);
-void PrintInodeLongList(sfs_inode inode, char* f_name);
+void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_num);
+void GetFileName(char* fname, uint32_t inode, sfs_superblock *super, uint32_t *start_block);
