@@ -4,3 +4,4 @@ project(file_sys VERSION 1.0
                   LANGUAGES C CXX)
 
 add_executable(dils dils.cpp sfs_code/driver.c sfs_code/bitmap.c)
+add_executable(dicpo dicpo.cpp sfs_code/driver.c sfs_code/bitmap.c)

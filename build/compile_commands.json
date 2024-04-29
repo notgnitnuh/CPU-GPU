@@ -13,5 +13,20 @@
   "directory": "/mnt/c/Dev/CENG458/build",
   "command": "/usr/bin/gcc   -g   -o CMakeFiles/dils.dir/sfs_code/bitmap.c.o   -c /mnt/c/Dev/CENG458/File_sys/sfs_code/bitmap.c",
   "file": "/mnt/c/Dev/CENG458/File_sys/sfs_code/bitmap.c"
+},
+{
+  "directory": "/mnt/c/Dev/CENG458/build",
+  "command": "/usr/bin/g++    -g   -o CMakeFiles/dicpo.dir/dicpo.cpp.o -c /mnt/c/Dev/CENG458/File_sys/dicpo.cpp",
+  "file": "/mnt/c/Dev/CENG458/File_sys/dicpo.cpp"
+},
+{
+  "directory": "/mnt/c/Dev/CENG458/build",
+  "command": "/usr/bin/gcc   -g   -o CMakeFiles/dicpo.dir/sfs_code/driver.c.o   -c /mnt/c/Dev/CENG458/File_sys/sfs_code/driver.c",
+  "file": "/mnt/c/Dev/CENG458/File_sys/sfs_code/driver.c"
+},
+{
+  "directory": "/mnt/c/Dev/CENG458/build",
+  "command": "/usr/bin/gcc   -g   -o CMakeFiles/dicpo.dir/sfs_code/bitmap.c.o   -c /mnt/c/Dev/CENG458/File_sys/sfs_code/bitmap.c",
+  "file": "/mnt/c/Dev/CENG458/File_sys/sfs_code/bitmap.c"
 }
 ]

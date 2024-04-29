@@ -48,7 +48,6 @@ int main(int argc, char **argv)
     if(i == 9)
       printf("superblock is not found in first 10 blocks.\nI quit!\n");
   }
-  
   /* close the disk image */
   driver_detach_disk_image();
 
@@ -60,40 +59,43 @@ void LongListing(sfs_superblock *super)
 {
   char raw_block[2][128];
   sfs_inode *inode = (sfs_inode*)raw_block[0]; // Grabs two inodes from block
-  sfs_dirent *dir = (sfs_dirent *)raw_block[1]; // Grab 4 dirs from block, no used, but removing causes seg fault?!?
+  sfs_dirent *dir = (sfs_dirent *)raw_block[1]; // Grab 4 dirs from block, no longer used, but removing causes seg fault?!?
+  char f_name[28];
+  char r_dir[3] = "..";
 
-  // int fo = open("test.txt", O_RDWR);
+  // int fo = open("rd2.out", O_RDWR);
   // dup2(fo,1);
 
-  /* Print all Inodes. 2 inodes per block, check for odd number 
-     FIXME: skipping initial dir at . for some reason (does it have inode?)
-   */
-  for(int i=0; i<super->num_inode_blocks - super->inodes_free/2-1; i++)
+  /* Print all Inodes. 2 inodes per block, check for odd number  */
+  driver_read(inode, super->inodes);
+  PrintInodeLongList(inode[0], super, 0,f_name);
+  PrintInodeLongList(inode[0], super, 0,r_dir);
+  PrintInodeLongList(inode[1], super, 1,f_name);
+  for(int i=1; i<super->num_inode_blocks - super->inodes_free/2-1; i++)
   {
     driver_read(inode, super->inodes+i);
-    PrintInodeLongList(inode[0], super, i*2);
-    PrintInodeLongList(inode[1], super, i*2+1);
+    PrintInodeLongList(inode[0], super, i*2,f_name);
+    PrintInodeLongList(inode[1], super, i*2+1,f_name);
   }
   driver_read(inode, super->inodes + super->num_inode_blocks - super->inodes_free/2 - 1 );
   if((super->num_inodes - super->inodes_free) % 2 != 1)
   {
-    PrintInodeLongList(inode[0], super, super->num_inodes - super->inodes_free-2);
-    PrintInodeLongList(inode[1], super, super->num_inodes - super->inodes_free-1);
+    PrintInodeLongList(inode[0], super, super->num_inodes - super->inodes_free-2,f_name);
+    PrintInodeLongList(inode[1], super, super->num_inodes - super->inodes_free-1,f_name);
   }
   else
-    PrintInodeLongList(inode[0], super, super->num_inodes - super->inodes_free-1);
-    
+    PrintInodeLongList(inode[0], super, super->num_inodes - super->inodes_free-1,f_name);
 }
 
-void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_num)
+void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_num, char* f_name)
 {
-  char* f_name;
   string perms = "drwxrwxrwx";
   uint16_t mask = 0b100000000;
   time_t t = (time_t)inode.atime;
   string atime = (string)ctime(&t);
   
-  GetFileName(f_name, inode_num, super, &super->rootdir);
+  if(strcmp(f_name, ".."))
+    GetFileName(f_name, inode_num, super, &super->rootdir);
 
   if(inode.type == FT_DIR)
     cout << "d";
@@ -108,7 +110,7 @@ void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_n
       cout << perms[i];
     mask = mask >> 1;
   }
-  cout << " " << right << setw(2) << inode.refcount;
+  cout << " " << right << 1;
   cout << setw(7) << inode.owner;
   cout << setw(7) << inode.group;
   cout << setw(8) << inode.size;
@@ -116,49 +118,6 @@ void PrintInodeLongList(sfs_inode inode, sfs_superblock *super, uint32_t inode_n
   cout << " " << left << f_name << endl;
 }
 
-
-void GetFileBlock(sfs_inode_t * node, size_t blockNumber, void* data)
-{
-    uint32_t ptrs[128];
-
-    // direct
-    if (blockNumber < 5)
-    {
-        //printf("pass\n");
-        driver_read(data, node->direct[blockNumber]);
-    }
-    // indirect
-    else if (blockNumber < (5 + 32))
-    {
-        driver_read(ptrs, node->indirect);
-        driver_read(data, ptrs[blockNumber - 5]);
-    }
-    // double indirect
-    else if (blockNumber < (5 + 32 + (32 * 32)))
-    {
-        driver_read(ptrs, node->dindirect);
-        int tmp = (blockNumber - 5 - 32) / 32;
-        driver_read(ptrs, ptrs[tmp]);
-        tmp = (blockNumber - 5 - 32) % 32;
-        driver_read(data, ptrs[tmp]);
-    }
-    // triple indirect
-    else if (blockNumber < (5 + 32 + (32*32) + (32*32*32)))
-    {
-        driver_read(ptrs, node->tindirect);
-        int tmp = (blockNumber - 5 - 32 - (32*32)) / (32*32);
-        driver_read(ptrs, ptrs[tmp]);
-        tmp = ((blockNumber - 5 - 32 - (32* 32)) / 32) % 32;
-        driver_read(ptrs, ptrs[tmp]);
-        tmp = (blockNumber - 5 - 32 - (32 * 32)) % 32;
-        driver_read(data, ptrs[tmp]);
-    }
-    else
-    {
-        printf("Error in block fetch, out of range\n");
-        exit(1);
-    }
-}
 
 void ShortListing(sfs_superblock *super)
 {

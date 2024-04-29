@@ -56,17 +56,6 @@ CMAKE_BINARY_DIR = /mnt/c/Dev/CENG458/File_sys
 #=============================================================================
 # Targets provided globally by CMake.
 
-# Special rule for the target rebuild_cache
-rebuild_cache:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
-	/usr/bin/cmake -H$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
-.PHONY : rebuild_cache
-
-# Special rule for the target rebuild_cache
-rebuild_cache/fast: rebuild_cache
-
-.PHONY : rebuild_cache/fast
-
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "No interactive CMake dialog available..."
@@ -77,6 +66,17 @@ edit_cache:
 edit_cache/fast: edit_cache
 
 .PHONY : edit_cache/fast
+
+# Special rule for the target rebuild_cache
+rebuild_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
+	/usr/bin/cmake -H$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
+.PHONY : rebuild_cache
+
+# Special rule for the target rebuild_cache
+rebuild_cache/fast: rebuild_cache
+
+.PHONY : rebuild_cache/fast
 
 # The main all target
 all: cmake_check_build_system
@@ -123,6 +123,46 @@ dils/fast:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/build
 .PHONY : dils/fast
 
+#=============================================================================
+# Target rules for targets named dicpo
+
+# Build rule for target.
+dicpo: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 dicpo
+.PHONY : dicpo
+
+# fast build rule for target.
+dicpo/fast:
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/build
+.PHONY : dicpo/fast
+
+dicpo.o: dicpo.cpp.o
+
+.PHONY : dicpo.o
+
+# target to build an object file
+dicpo.cpp.o:
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/dicpo.cpp.o
+.PHONY : dicpo.cpp.o
+
+dicpo.i: dicpo.cpp.i
+
+.PHONY : dicpo.i
+
+# target to preprocess a source file
+dicpo.cpp.i:
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/dicpo.cpp.i
+.PHONY : dicpo.cpp.i
+
+dicpo.s: dicpo.cpp.s
+
+.PHONY : dicpo.s
+
+# target to generate assembly for a file
+dicpo.cpp.s:
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/dicpo.cpp.s
+.PHONY : dicpo.cpp.s
+
 dils.o: dils.cpp.o
 
 .PHONY : dils.o
@@ -157,6 +197,7 @@ sfs_code/bitmap.o: sfs_code/bitmap.c.o
 # target to build an object file
 sfs_code/bitmap.c.o:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/bitmap.c.o
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/sfs_code/bitmap.c.o
 .PHONY : sfs_code/bitmap.c.o
 
 sfs_code/bitmap.i: sfs_code/bitmap.c.i
@@ -166,6 +207,7 @@ sfs_code/bitmap.i: sfs_code/bitmap.c.i
 # target to preprocess a source file
 sfs_code/bitmap.c.i:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/bitmap.c.i
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/sfs_code/bitmap.c.i
 .PHONY : sfs_code/bitmap.c.i
 
 sfs_code/bitmap.s: sfs_code/bitmap.c.s
@@ -175,6 +217,7 @@ sfs_code/bitmap.s: sfs_code/bitmap.c.s
 # target to generate assembly for a file
 sfs_code/bitmap.c.s:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/bitmap.c.s
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/sfs_code/bitmap.c.s
 .PHONY : sfs_code/bitmap.c.s
 
 sfs_code/driver.o: sfs_code/driver.c.o
@@ -184,6 +227,7 @@ sfs_code/driver.o: sfs_code/driver.c.o
 # target to build an object file
 sfs_code/driver.c.o:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/driver.c.o
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/sfs_code/driver.c.o
 .PHONY : sfs_code/driver.c.o
 
 sfs_code/driver.i: sfs_code/driver.c.i
@@ -193,6 +237,7 @@ sfs_code/driver.i: sfs_code/driver.c.i
 # target to preprocess a source file
 sfs_code/driver.c.i:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/driver.c.i
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/sfs_code/driver.c.i
 .PHONY : sfs_code/driver.c.i
 
 sfs_code/driver.s: sfs_code/driver.c.s
@@ -202,6 +247,7 @@ sfs_code/driver.s: sfs_code/driver.c.s
 # target to generate assembly for a file
 sfs_code/driver.c.s:
 	$(MAKE) -f CMakeFiles/dils.dir/build.make CMakeFiles/dils.dir/sfs_code/driver.c.s
+	$(MAKE) -f CMakeFiles/dicpo.dir/build.make CMakeFiles/dicpo.dir/sfs_code/driver.c.s
 .PHONY : sfs_code/driver.c.s
 
 # Help Target
@@ -210,9 +256,13 @@ help:
 	@echo "... all (the default if no target is provided)"
 	@echo "... clean"
 	@echo "... depend"
-	@echo "... rebuild_cache"
-	@echo "... dils"
 	@echo "... edit_cache"
+	@echo "... dils"
+	@echo "... rebuild_cache"
+	@echo "... dicpo"
+	@echo "... dicpo.o"
+	@echo "... dicpo.i"
+	@echo "... dicpo.s"
 	@echo "... dils.o"
 	@echo "... dils.i"
 	@echo "... dils.s"
